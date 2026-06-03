@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61", "setuptools-scm[toml]>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot_teleoperator_pico4"
+dynamic = ["version"]
+description = "Pico4 teleoperator integration with LeRobot"
+readme = "README.md"
+authors = [
+  { name = "Xense" },
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = [
+  "numpy",
+]
+
+[project.scripts]
+lerobot-teleoperate-pico4 = "lerobot_teleoperator_pico4.scripts.teleoperate_pico4:main"
+lerobot-record-pico4 = "lerobot_teleoperator_pico4.scripts.lerobot_record_pico4:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lerobot_teleoperator_pico4", "lerobot_teleoperator_pico4.*"]
+exclude = ["*.egg-info"]
+
+[tool.setuptools_scm]
+tag_regex = "^v(?P<version>\\d+\\.\\d+\\.\\d+)$"
+fallback_version = "0.0.0"
