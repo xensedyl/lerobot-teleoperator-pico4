@@ -30,7 +30,8 @@ lerobot-teleoperate-pico4 \
   --robot.action_mode=cartesian \
   --teleop.type=pico4 \
   --teleop.id=pico4 \
-  --fps=100
+  --fps=100 \
+  --display_data=true
 ```
 
 Recording example:
@@ -47,7 +48,19 @@ lerobot-record-pico4 \
   --dataset.repo_id=${HF_USER}/b601-pico4-demo \
   --dataset.single_task="Teleoperate B601 with Pico4" \
   --dataset.num_episodes=1 \
-  --dataset.fps=30
+  --dataset.fps=30 \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
+```
+
+If push to huggingface, first check authentication:
+```bash
+hf auth whoami
+```
+If not login in:
+```bash
+hf auth login
 ```
 
 This command is provided by the plugin and leaves LeRobot's built-in

@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 import traceback
 from dataclasses import asdict, dataclass, field
@@ -76,6 +77,48 @@ class Pico4RecordConfig:
     resume: bool = False
 
 
+def _gripper_observation_to_action(robot: Robot, obs: RobotObservation) -> float:
+    if "gripper.pos" not in obs:
+        current_pose = robot.get_current_tcp_pose_quat()
+        return float(current_pose[7])
+
+    return max(0.0, min(1.0, float(obs["gripper.pos"])))
+
+
+def _observation_as_action(robot: Robot, obs: RobotObservation) -> RobotAction:
+    action: RobotAction = {}
+    for key in robot.action_features:
+        if key == "gripper.pos":
+            action[key] = _gripper_observation_to_action(robot, obs)
+        elif key in obs:
+            action[key] = obs[key]
+
+    missing = set(robot.action_features) - set(action)
+    if missing:
+        raise ValueError(f"Cannot build reset action from observation; missing keys: {sorted(missing)}")
+    return action
+
+
+def _start_reset_in_background(
+    robot: Robot,
+    teleop: Teleoperator,
+    reset_done: threading.Event,
+) -> threading.Thread:
+    def _run_reset() -> None:
+        try:
+            logging.info("Reset to initial position (A button pressed).")
+            reset_to_initial_position(robot, teleop)
+        except Exception as e:
+            logging.error("Failed to reset robot position: %s\n%s", e, traceback.format_exc())
+        finally:
+            reset_done.set()
+
+    reset_done.clear()
+    thread = threading.Thread(target=_run_reset, daemon=True)
+    thread.start()
+    return thread
+
+
 @safe_stop_image_writer
 def record_loop(
     robot: Robot,
@@ -96,53 +139,66 @@ def record_loop(
 
     timestamp = 0.0
     start_episode_t = time.perf_counter()
-    while timestamp < control_time_s:
-        start_loop_t = time.perf_counter()
+    reset_done = threading.Event()
+    reset_done.set()
+    reset_thread: threading.Thread | None = None
+    prev_observation_frame = None
+    try:
+        while timestamp < control_time_s:
+            start_loop_t = time.perf_counter()
+            reset_triggered = False
 
-        if events["exit_early"]:
-            events["exit_early"] = False
-            break
+            if events["exit_early"]:
+                events["exit_early"] = False
+                break
 
-        obs = robot.get_observation()
-        sync_teleop_tcp_pose(teleop, robot)
+            resetting = not reset_done.is_set()
+            obs = robot.get_observation()
+            sync_teleop_tcp_pose(teleop, robot)
 
-        obs_processed = robot_observation_processor(obs)
-        if dataset is not None:
-            observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
+            obs_processed = robot_observation_processor(obs)
+            observation_frame = None
+            if dataset is not None:
+                observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
 
-        raw_action = teleop.get_action()
-        if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
-            try:
-                logging.info("Reset to initial position (A button pressed).")
-                reset_to_initial_position(robot, teleop)
-            except Exception as e:
-                logging.error("Failed to reset robot position: %s\n%s", e, traceback.format_exc())
+            if resetting:
+                action_values = _observation_as_action(robot, obs)
+            else:
+                raw_action = teleop.get_action()
+                if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
+                    reset_thread = _start_reset_in_background(robot, teleop, reset_done)
+                    reset_triggered = True
+                    action_values = _observation_as_action(robot, obs)
+                else:
+                    action_values = teleop_action_processor((raw_action, obs))
+                    robot_action_to_send = robot_action_processor((action_values, obs))
+                    action_values = robot.send_action(robot_action_to_send)
+
+            if dataset is not None:
+                action_frame = build_dataset_frame(dataset.features, action_values, prefix=ACTION)
+                if (resetting or reset_triggered) and prev_observation_frame is not None:
+                    # Match BiFlexivRT reset recording: the reset runs in the robot
+                    # thread, so action[t] is the current robot state reached from
+                    # obs[t-1], not a Pico4 command sent by Python.
+                    dataset.add_frame({**prev_observation_frame, **action_frame, "task": single_task})
+                elif not (resetting or reset_triggered):
+                    dataset.add_frame({**observation_frame, **action_frame, "task": single_task})
+
+                prev_observation_frame = observation_frame
+
             if display_data:
                 log_rerun_data(
                     observation=obs_processed,
-                    action={},
+                    action=action_values,
                     compress_images=display_compressed_images,
                 )
-            continue
 
-        action_values = teleop_action_processor((raw_action, obs))
-        robot_action_to_send = robot_action_processor((action_values, obs))
-        robot.send_action(robot_action_to_send)
-
-        if dataset is not None:
-            action_frame = build_dataset_frame(dataset.features, action_values, prefix=ACTION)
-            dataset.add_frame({**observation_frame, **action_frame, "task": single_task})
-
-        if display_data:
-            log_rerun_data(
-                observation=obs_processed,
-                action=action_values,
-                compress_images=display_compressed_images,
-            )
-
-        dt_s = time.perf_counter() - start_loop_t
-        precise_sleep(max(1 / fps - dt_s, 0.0))
-        timestamp = time.perf_counter() - start_episode_t
+            dt_s = time.perf_counter() - start_loop_t
+            precise_sleep(max(1 / fps - dt_s, 0.0))
+            timestamp = time.perf_counter() - start_episode_t
+    finally:
+        if reset_thread is not None and reset_thread.is_alive():
+            reset_thread.join()
 
 
 @parser.wrap()
