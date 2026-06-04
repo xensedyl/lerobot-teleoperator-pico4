@@ -91,7 +91,6 @@ def teleop_loop(
                     action={},
                     compress_images=display_compressed_images,
                 )
-            print("\033[2J\033[H", end="", flush=True)
             continue
 
         teleop_action = teleop_action_processor((raw_action, obs))
