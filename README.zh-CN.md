@@ -58,6 +58,18 @@ lerobot-record-pico4 \
   --dataset.fps=30
 ```
 
+如果要推送到 Hugging Face，请先检查认证状态：
+
+```bash
+hf auth whoami
+```
+
+如果尚未登录：
+
+```bash
+hf auth login
+```
+
 ## 说明
 
 这个包提供独立命令 `lerobot-teleoperate-pico4`，不需要修改 LeRobot 主仓库的

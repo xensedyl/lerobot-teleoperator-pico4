@@ -55,10 +55,13 @@ lerobot-record-pico4 \
 ```
 
 If push to huggingface, first check authentication:
+
 ```bash
 hf auth whoami
 ```
+
 If not login in:
+
 ```bash
 hf auth login
 ```
