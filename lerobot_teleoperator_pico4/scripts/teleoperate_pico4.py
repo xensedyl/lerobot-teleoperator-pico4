@@ -36,11 +36,31 @@ class Pico4TeleoperateConfig:
 
 
 def sync_teleop_tcp_pose(teleop: Teleoperator, robot: Robot) -> None:
-    if not hasattr(teleop, "set_current_tcp_pose"):
-        raise ValueError(f"{teleop} does not support current TCP pose synchronization.")
     if not hasattr(robot, "get_current_tcp_pose_quat"):
         raise ValueError(f"{robot} does not provide get_current_tcp_pose_quat().")
-    teleop.set_current_tcp_pose(robot.get_current_tcp_pose_quat())
+
+    current_pose = robot.get_current_tcp_pose_quat()
+    if hasattr(teleop, "set_current_tcp_poses"):
+        left_pose, right_pose = current_pose
+        teleop.set_current_tcp_poses(left_pose, right_pose)
+    elif hasattr(teleop, "set_current_tcp_pose"):
+        teleop.set_current_tcp_pose(current_pose)
+    else:
+        raise ValueError(f"{teleop} does not support current TCP pose synchronization.")
+
+
+def connect_teleop_with_robot_pose(teleop: Teleoperator, robot: Robot) -> None:
+    current_pose = robot.get_current_tcp_pose_quat()
+    if hasattr(teleop, "set_current_tcp_poses"):
+        left_pose, right_pose = current_pose
+        logging.info("Start left TCP pose (quat): %s", left_pose)
+        logging.info("Start right TCP pose (quat): %s", right_pose)
+        teleop.connect(left_tcp_pose_quat=left_pose, right_tcp_pose_quat=right_pose)
+    else:
+        if hasattr(teleop, "set_current_tcp_pose"):
+            teleop.set_current_tcp_pose(current_pose)
+        logging.info("Start TCP pose (quat): %s", current_pose)
+        teleop.connect()
 
 
 def reset_to_initial_position(robot: Robot, teleop: Teleoperator) -> None:
@@ -127,12 +147,16 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
     init_logging()
     logging.info(pformat(asdict(cfg)))
 
-    if cfg.teleop.type != "pico4":
-        raise ValueError("lerobot-teleoperate-pico4 requires --teleop.type=pico4.")
+    if cfg.teleop.type not in {"pico4", "bi_pico4"}:
+        raise ValueError("lerobot-teleoperate-pico4 requires --teleop.type=pico4 or bi_pico4.")
     if getattr(cfg.robot, "action_mode", None) != "cartesian":
         raise ValueError(
             "Pico4 teleoperation requires --robot.action_mode=cartesian so tcp.* actions are accepted."
         )
+    if cfg.teleop.type == "bi_pico4" and cfg.robot.type != "bi_seeed_b601_rt_follower":
+        raise ValueError("--teleop.type=bi_pico4 requires --robot.type=bi_seeed_b601_rt_follower.")
+    if cfg.teleop.type == "pico4" and cfg.robot.type == "bi_seeed_b601_rt_follower":
+        raise ValueError("--robot.type=bi_seeed_b601_rt_follower requires --teleop.type=bi_pico4.")
 
     if cfg.display_data:
         init_rerun(session_name="pico4_teleoperation", ip=cfg.display_ip, port=cfg.display_port)
@@ -148,10 +172,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
 
     try:
         robot.connect()
-        sync_teleop_tcp_pose(teleop, robot)
-        logging.info("Start TCP pose (quat): %s", robot.get_current_tcp_pose_quat())
-
-        teleop.connect()
+        connect_teleop_with_robot_pose(teleop, robot)
 
         teleop_loop(
             teleop=teleop,

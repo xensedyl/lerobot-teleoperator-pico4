@@ -37,7 +37,7 @@ from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, log_say
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
-from .teleoperate_pico4 import reset_to_initial_position, sync_teleop_tcp_pose
+from .teleoperate_pico4 import connect_teleop_with_robot_pose, reset_to_initial_position, sync_teleop_tcp_pose
 
 
 @dataclass
@@ -77,19 +77,25 @@ class Pico4RecordConfig:
     resume: bool = False
 
 
-def _gripper_observation_to_action(robot: Robot, obs: RobotObservation) -> float:
-    if "gripper.pos" not in obs:
-        current_pose = robot.get_current_tcp_pose_quat()
-        return float(current_pose[7])
+def _gripper_observation_to_action(robot: Robot, obs: RobotObservation, key: str) -> float:
+    if key in obs:
+        return max(0.0, min(1.0, float(obs[key])))
 
-    return max(0.0, min(1.0, float(obs["gripper.pos"])))
+    current_pose = robot.get_current_tcp_pose_quat()
+    if key == "gripper.pos":
+        return float(current_pose[7])
+    if key == "left_gripper.pos":
+        return float(current_pose[0][7])
+    if key == "right_gripper.pos":
+        return float(current_pose[1][7])
+    raise KeyError(key)
 
 
 def _observation_as_action(robot: Robot, obs: RobotObservation) -> RobotAction:
     action: RobotAction = {}
     for key in robot.action_features:
-        if key == "gripper.pos":
-            action[key] = _gripper_observation_to_action(robot, obs)
+        if key.endswith("gripper.pos"):
+            action[key] = _gripper_observation_to_action(robot, obs, key)
         elif key in obs:
             action[key] = obs[key]
 
@@ -206,10 +212,14 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     init_logging()
     logging.info(pformat(asdict(cfg)))
 
-    if cfg.teleop.type != "pico4":
-        raise ValueError("lerobot-record-pico4 requires --teleop.type=pico4.")
+    if cfg.teleop.type not in {"pico4", "bi_pico4"}:
+        raise ValueError("lerobot-record-pico4 requires --teleop.type=pico4 or bi_pico4.")
     if getattr(cfg.robot, "action_mode", None) != "cartesian":
         raise ValueError("Pico4 recording requires --robot.action_mode=cartesian.")
+    if cfg.teleop.type == "bi_pico4" and cfg.robot.type != "bi_seeed_b601_rt_follower":
+        raise ValueError("--teleop.type=bi_pico4 requires --robot.type=bi_seeed_b601_rt_follower.")
+    if cfg.teleop.type == "pico4" and cfg.robot.type == "bi_seeed_b601_rt_follower":
+        raise ValueError("--robot.type=bi_seeed_b601_rt_follower requires --teleop.type=bi_pico4.")
 
     if cfg.display_data:
         init_rerun(session_name="pico4_recording", ip=cfg.display_ip, port=cfg.display_port)
@@ -270,9 +280,7 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
             )
 
         robot.connect()
-        sync_teleop_tcp_pose(teleop, robot)
-        logging.info("Start TCP pose (quat): %s", robot.get_current_tcp_pose_quat())
-        teleop.connect()
+        connect_teleop_with_robot_pose(teleop, robot)
 
         listener, events = init_keyboard_listener()
 
