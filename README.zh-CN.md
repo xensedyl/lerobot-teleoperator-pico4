@@ -44,7 +44,8 @@ lerobot-teleoperate-pico4 \
   --robot.action_mode=cartesian \
   --teleop.type=pico4 \
   --teleop.id=pico4 \
-  --fps=100
+  --fps=100 \
+  --display_data=true
 ```
 
 双臂遥操作：
