@@ -78,7 +78,10 @@ lerobot-record-pico4 \
   --dataset.repo_id=${HF_USER}/b601-pico4-demo \
   --dataset.single_task="Teleoperate B601 with Pico4" \
   --dataset.num_episodes=1 \
-  --dataset.fps=30
+  --dataset.fps=30 \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
 ```
 
 双臂采集数据：
@@ -96,7 +99,10 @@ lerobot-record-pico4 \
   --dataset.repo_id=${HF_USER}/b601-bi-pico4-demo \
   --dataset.single_task="Teleoperate dual B601 with Pico4" \
   --dataset.num_episodes=1 \
-  --dataset.fps=30
+  --dataset.fps=30 \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
 ```
 
 双臂运行前先确认当前串口：
