@@ -54,6 +54,8 @@ lerobot-record-pico4 \
   --dataset.single_task="Teleoperate B601 with Pico4" \
   --dataset.num_episodes=1 \
   --dataset.fps=30 \
+  --dataset.episode_time_s=600 \
+  --dataset.reset_time_s=120 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
@@ -91,6 +93,8 @@ lerobot-record-pico4 \
   --dataset.single_task="Teleoperate dual B601 with Pico4" \
   --dataset.num_episodes=1 \
   --dataset.fps=30 \
+  --dataset.episode_time_s=600 \
+  --dataset.reset_time_s=120 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
