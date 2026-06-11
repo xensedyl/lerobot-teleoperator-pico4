@@ -125,6 +125,13 @@ def _start_reset_in_background(
     return thread
 
 
+def _disconnect_recording_devices(robot: Robot, teleop: Teleoperator | None) -> None:
+    if robot.is_connected:
+        robot.disconnect()
+    if teleop is not None and teleop.is_connected:
+        teleop.disconnect()
+
+
 @safe_stop_image_writer
 def record_loop(
     robot: Robot,
@@ -329,16 +336,16 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
                     dataset.clear_episode_buffer()
                     continue
 
+                if recorded_episodes >= cfg.dataset.num_episodes - 1 or events["stop_recording"]:
+                    _disconnect_recording_devices(robot, teleop)
+
                 dataset.save_episode()
                 recorded_episodes += 1
     finally:
         log_say("Stop recording", cfg.play_sounds, blocking=True)
+        _disconnect_recording_devices(robot, teleop)
         if dataset:
             dataset.finalize()
-        if robot.is_connected:
-            robot.disconnect()
-        if teleop and teleop.is_connected:
-            teleop.disconnect()
         if not is_headless() and listener:
             listener.stop()
         if cfg.display_data:
