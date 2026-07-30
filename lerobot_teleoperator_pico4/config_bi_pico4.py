@@ -27,3 +27,5 @@ class BiPico4Config(TeleoperatorConfig):
     position_jump_threshold: float = 0.1
     max_pos_velocity: float = 1.0
     max_rot_velocity: float = 6.28
+
+    use_headset: bool = False
