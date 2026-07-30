@@ -1,10 +1,13 @@
+import contextlib
 import logging
 import threading
 import time
 import traceback
 from dataclasses import asdict, dataclass, field
+from fractions import Fraction
 from pathlib import Path
 from pprint import pformat
+from tempfile import TemporaryDirectory
 
 import rerun as rr
 
@@ -12,10 +15,10 @@ from lerobot.cameras import CameraConfig  # noqa: F401
 from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
 from lerobot.configs import parser
+from lerobot.configs.video import RGBEncoderConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.pipeline_features import aggregate_pipeline_dataset_features, create_initial_features
-from lerobot.datasets.utils import build_dataset_frame, combine_feature_dicts
 from lerobot.datasets.video_utils import VideoEncodingManager
 from lerobot.processor import (
     RobotAction,
@@ -24,6 +27,7 @@ from lerobot.processor import (
     make_default_processors,
 )
 from lerobot.robots import Robot, RobotConfig, make_robot_from_config
+from lerobot.utils.feature_utils import build_dataset_frame, combine_feature_dicts
 
 # Built-in robots are only registered with draccus when their config module is
 # imported. Import TRON2 so ``--robot.type=tron2`` is a valid choice; guard it so
@@ -32,15 +36,14 @@ try:
     from lerobot.robots import tron2 as _tron2  # noqa: F401
 except ImportError:
     pass
-from lerobot.teleoperators import Teleoperator, TeleoperatorConfig, make_teleoperator_from_config
-from lerobot.utils.constants import ACTION, OBS_STR
-from lerobot.utils.control_utils import (
-    init_keyboard_listener,
-    is_headless,
+from lerobot.common.control_utils import (
     sanity_check_dataset_name,
     sanity_check_dataset_robot_compatibility,
 )
+from lerobot.teleoperators import Teleoperator, TeleoperatorConfig, make_teleoperator_from_config
+from lerobot.utils.constants import ACTION, HF_LEROBOT_HOME, OBS_STR
 from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.keyboard_input import init_keyboard_listener, is_headless
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, log_say
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
@@ -70,6 +73,9 @@ class Pico4DatasetRecordConfig:
     num_image_writer_threads_per_camera: int = 4
     video_encoding_batch_size: int = 1
     vcodec: str = "libsvtav1"
+    streaming_encoding: bool = True
+    encoder_queue_maxsize: int = 30
+    encoder_threads: int | None = None
     rename_map: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -88,6 +94,123 @@ class Pico4RecordConfig:
     display_compressed_images: bool = False
     play_sounds: bool = True
     resume: bool = False
+    camera_stabilization_time_s: float = 2.0
+
+
+def _probe_rgb_encoder(
+    encoder: RGBEncoderConfig,
+    fps: int,
+    encoder_threads: int | None,
+) -> None:
+    """Open the codec and encode one frame so hardware-only failures happen before recording."""
+    import av
+    import numpy as np
+
+    with TemporaryDirectory() as tmp_dir:
+        container = av.open(str(Path(tmp_dir) / "encoder_probe.mp4"), "w")
+        try:
+            stream = container.add_stream(
+                encoder.vcodec,
+                fps,
+                options=encoder.get_codec_options(encoder_threads, as_strings=True),
+            )
+            stream.pix_fmt = encoder.pix_fmt
+            stream.width = 64
+            stream.height = 64
+            stream.time_base = Fraction(1, fps)
+
+            frame = av.VideoFrame.from_ndarray(np.zeros((64, 64, 3), dtype=np.uint8), format="rgb24")
+            frame.pts = 0
+            frame.time_base = Fraction(1, fps)
+            for packet in stream.encode(frame):
+                container.mux(packet)
+            for packet in stream.encode():
+                container.mux(packet)
+        finally:
+            with contextlib.suppress(Exception):
+                container.close()
+
+
+def _make_rgb_encoder(
+    requested_vcodec: str,
+    fps: int,
+    encoder_threads: int | None,
+) -> RGBEncoderConfig:
+    encoder = RGBEncoderConfig(vcodec=requested_vcodec)
+    try:
+        _probe_rgb_encoder(encoder, fps, encoder_threads)
+        return encoder
+    except Exception as error:
+        if requested_vcodec != "auto":
+            raise RuntimeError(
+                f"Video encoder {encoder.vcodec!r} could not be opened. "
+                "Try --dataset.vcodec=h264 or --dataset.vcodec=libsvtav1."
+            ) from error
+
+        logging.warning(
+            "Auto-selected video encoder %s could not be opened (%s). Trying software fallback.",
+            encoder.vcodec,
+            error,
+        )
+
+    fallback_errors: list[str] = []
+    for fallback_vcodec in ("h264", "libsvtav1"):
+        if fallback_vcodec == encoder.vcodec:
+            continue
+        try:
+            fallback = RGBEncoderConfig(vcodec=fallback_vcodec)
+            _probe_rgb_encoder(fallback, fps, encoder_threads)
+            logging.warning("Falling back to video encoder %s.", fallback.vcodec)
+            return fallback
+        except Exception as error:
+            fallback_errors.append(f"{fallback_vcodec}: {error}")
+
+    raise RuntimeError("No usable RGB video encoder found: " + "; ".join(fallback_errors))
+
+
+def _wait_for_stable_camera_frames(
+    robot: Robot,
+    fps: int,
+    stabilization_time_s: float,
+) -> None:
+    """Require continuous fresh frames from every camera before recording."""
+    cameras = getattr(robot, "cameras", {})
+    if not cameras or stabilization_time_s <= 0:
+        return
+
+    camera_configs = getattr(getattr(robot, "config", None), "cameras", {})
+    required_cycles = max(1, round(fps * stabilization_time_s))
+    stabilization_deadline = time.monotonic() + max(10.0, stabilization_time_s * 3)
+    stable_cycles = 0
+    logging.info(
+        "Waiting for %d camera stream(s) to remain stable for %.1f seconds before recording.",
+        len(cameras),
+        stabilization_time_s,
+    )
+
+    while stable_cycles < required_cycles:
+        try:
+            for name, camera in cameras.items():
+                async_read = getattr(camera, "async_read", None)
+                if not callable(async_read):
+                    continue
+                camera_config = camera_configs.get(name) if isinstance(camera_configs, dict) else None
+                timeout_ms = max(int(getattr(camera_config, "frame_timeout_ms", 1000)), 1000)
+                async_read(timeout_ms=timeout_ms)
+            stable_cycles += 1
+        except TimeoutError as error:
+            stable_cycles = 0
+            if time.monotonic() >= stabilization_deadline:
+                raise TimeoutError(
+                    f"Camera streams did not remain stable for {stabilization_time_s:.1f} seconds "
+                    "before the warmup deadline."
+                ) from error
+            logging.warning("Camera %r warmup was interrupted; restarting the stability window.", name)
+
+    # Validate the same integrated observation path used by record_loop without
+    # adding the warmup sample to the dataset.
+    robot.get_observation()
+    logging.info("Camera streams are stable; starting episode recording.")
 
 
 def _gripper_observation_to_action(robot: Robot, obs: RobotObservation, key: str) -> float:
@@ -256,6 +379,11 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+    rgb_encoder = (
+        _make_rgb_encoder(cfg.dataset.vcodec, cfg.dataset.fps, cfg.dataset.encoder_threads)
+        if cfg.dataset.video
+        else None
+    )
 
     dataset_features = combine_feature_dicts(
         aggregate_pipeline_dataset_features(
@@ -274,20 +402,26 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     listener = None
     try:
         if cfg.resume:
-            dataset = LeRobotDataset(
+            resume_root = (
+                Path(cfg.dataset.root)
+                if cfg.dataset.root is not None
+                else HF_LEROBOT_HOME / cfg.dataset.repo_id
+            )
+            num_cameras = len(robot.cameras) if hasattr(robot, "cameras") else 0
+            dataset = LeRobotDataset.resume(
                 cfg.dataset.repo_id,
-                root=cfg.dataset.root,
+                root=resume_root,
                 batch_encoding_size=cfg.dataset.video_encoding_batch_size,
-                vcodec=cfg.dataset.vcodec,
+                rgb_encoder=rgb_encoder,
+                streaming_encoding=cfg.dataset.streaming_encoding,
+                encoder_queue_maxsize=cfg.dataset.encoder_queue_maxsize,
+                encoder_threads=cfg.dataset.encoder_threads,
+                image_writer_processes=cfg.dataset.num_image_writer_processes if num_cameras > 0 else 0,
+                image_writer_threads=(
+                    cfg.dataset.num_image_writer_threads_per_camera * num_cameras if num_cameras > 0 else 0
+                ),
             )
-            if hasattr(robot, "cameras") and len(robot.cameras) > 0:
-                dataset.start_image_writer(
-                    num_processes=cfg.dataset.num_image_writer_processes,
-                    num_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
-                )
-            sanity_check_dataset_robot_compatibility(
-                dataset, robot, cfg.dataset.fps, dataset_features
-            )
+            sanity_check_dataset_robot_compatibility(dataset, robot, cfg.dataset.fps, dataset_features)
         else:
             sanity_check_dataset_name(cfg.dataset.repo_id, None)
             dataset = LeRobotDataset.create(
@@ -300,7 +434,10 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
                 image_writer_processes=cfg.dataset.num_image_writer_processes,
                 image_writer_threads=cfg.dataset.num_image_writer_threads_per_camera * len(robot.cameras),
                 batch_encoding_size=cfg.dataset.video_encoding_batch_size,
-                vcodec=cfg.dataset.vcodec,
+                rgb_encoder=rgb_encoder,
+                streaming_encoding=cfg.dataset.streaming_encoding,
+                encoder_queue_maxsize=cfg.dataset.encoder_queue_maxsize,
+                encoder_threads=cfg.dataset.encoder_threads,
             )
 
         robot.connect()
@@ -308,9 +445,29 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
 
         listener, events = init_keyboard_listener()
 
+        if not cfg.dataset.streaming_encoding:
+            logging.info(
+                "Streaming encoding is disabled. Enable it with "
+                "--dataset.streaming_encoding=true to encode camera frames while recording."
+            )
+
         with VideoEncodingManager(dataset):
             recorded_episodes = 0
             while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
+                # Some LeRobot versions can initialize codec contexts before the
+                # first frame. Other versions start them from the first add_frame().
+                prepare_episode_recording = getattr(dataset, "prepare_episode_recording", None)
+                if callable(prepare_episode_recording):
+                    prepare_episode_recording()
+
+                _wait_for_stable_camera_frames(
+                    robot,
+                    fps=cfg.dataset.fps,
+                    stabilization_time_s=cfg.camera_stabilization_time_s,
+                )
+                if events["stop_recording"]:
+                    break
+
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
                 record_loop(
                     robot=robot,

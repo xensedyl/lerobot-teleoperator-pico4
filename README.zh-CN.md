@@ -128,6 +128,40 @@ lerobot-teleoperate-pico4 \
   --display_data=true
 ```
 
+TRON2 双臂数据采集示例（机器人/手柄参数和上面遥操作一样，多了 `--dataset.*`；
+注意采集帧率是 `--dataset.fps`，不是顶层 `--fps`）：
+
+```bash
+lerobot-record-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=${HF_USER}/tron2-pico4-demo \
+  --dataset.single_task="双臂 TRON2 抓取放置" \
+  --dataset.num_episodes=5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=30 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
+```
+
+说明：
+- `--dataset.repo_id`、`--dataset.single_task` 必填，`repo_id` 用 `用户名/数据集名` 格式。
+- `--dataset.push_to_hub=false` 只存本地（`~/.cache/huggingface/lerobot/<repo_id>`，
+  或用 `--dataset.root=/路径` 指定）；设 `true` 则上传，需先 `hf auth login`。
+- 采集中键盘控制：**→** 提前结束当前 episode 并进入复位，**←** 重录当前 episode，
+  **ESC** 停止录制。每个 episode 之间有 `--dataset.reset_time_s` 复位阶段；右手柄
+  **A 键**让双臂回到初始位（复位过程也会被录进数据）。
+- 记录的动作维度为 左臂、右臂、左夹爪、右夹爪（20 维）。
+- 先用 `--dataset.num_episodes=1 --dataset.push_to_hub=false` 跑一条验证流程。
+
 双臂运行前先确认当前串口：
 
 ```bash

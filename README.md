@@ -121,6 +121,43 @@ lerobot-teleoperate-pico4 \
   --display_data=true
 ```
 
+TRON2 bimanual recording example (same robot/teleop args as above, plus
+`--dataset.*`; note the recording rate is `--dataset.fps`, not top-level `--fps`):
+
+```bash
+lerobot-record-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=${HF_USER}/tron2-pico4-demo \
+  --dataset.single_task="Bimanual TRON2 pick and place" \
+  --dataset.num_episodes=5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=30 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
+```
+
+Notes:
+- `--dataset.repo_id` and `--dataset.single_task` are required. Use the
+  `username/dataset_name` form for `repo_id`.
+- Set `--dataset.push_to_hub=false` to keep the dataset local
+  (`~/.cache/huggingface/lerobot/<repo_id>`, or override with `--dataset.root=/path`).
+  Use `true` to upload, after `hf auth login`.
+- During recording: **→** ends the current episode and enters reset, **←**
+  re-records the episode, **ESC** stops recording. Between episodes there is a
+  `--dataset.reset_time_s` reset phase; the right-controller **A** button returns
+  both arms to their initial pose (recorded too).
+- The recorded action layout is left arm, right arm, left gripper, right gripper (20-D).
+- Do a quick `--dataset.num_episodes=1 --dataset.push_to_hub=false` dry run first.
+
 For two B601 arms, check the current serial ports before running:
 
 ```bash
