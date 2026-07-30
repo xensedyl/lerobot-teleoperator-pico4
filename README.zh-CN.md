@@ -13,10 +13,14 @@
 - `tcp.r1` ... `tcp.r6`，使用 6D rotation 表示姿态
 - `gripper.pos`，范围是 `[0, 1]`
 
-双臂 teleoperator 使用 Pico4 左右两个手柄，输出带前缀的动作：
+双臂 teleoperator 使用 Pico4 左右两个手柄，输出 20 个带前缀的动作，顺序为
+左臂、右臂、左夹爪、右夹爪（与 TRON2 机器人的 `action_features` 布局一致）：
 
-- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`, `left_gripper.pos`
-- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`, `right_gripper.pos`
+- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`
+- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
+- `left_gripper.pos`, `right_gripper.pos`
+
+支持的双臂机器人：`bi_seeed_b601_rt_follower` 和 `tron2`。
 
 ## 安装
 
@@ -107,6 +111,21 @@ lerobot-record-pico4 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
+```
+
+TRON2 双臂遥操作示例（TRON2 本身就是笛卡尔控制，无需 `--robot.action_mode`；
+`--teleop.invert_gripper=true` 用于匹配 TRON2 的夹爪方向，即 `gripper.pos` 越大越开）：
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --fps=100 \
+  --display_data=true
 ```
 
 双臂运行前先确认当前串口：

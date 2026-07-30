@@ -16,6 +16,9 @@ class BiPico4Config(TeleoperatorConfig):
 
     left_gripper_width: float = 1.0
     right_gripper_width: float = 1.0
+    # Invert the trigger->gripper mapping for both controllers. Set True for
+    # TRON2 (gripper.pos high == open); leave False for B601.
+    invert_gripper: bool = False
 
     grip_enable_threshold: float = 0.5
     grip_disable_threshold: float = 0.3

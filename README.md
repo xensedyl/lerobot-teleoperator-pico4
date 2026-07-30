@@ -10,10 +10,15 @@ The single-arm teleoperator outputs Cartesian TCP actions:
 - `tcp.r1` ... `tcp.r6` using 6D rotation representation
 - `gripper.pos` in `[0, 1]`
 
-The bimanual teleoperator uses both Pico4 controllers and outputs prefixed actions:
+The bimanual teleoperator uses both Pico4 controllers and outputs 20 prefixed
+actions ordered as left arm, right arm, left gripper, right gripper (matching the
+TRON2 robot's `action_features` layout):
 
-- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`, `left_gripper.pos`
-- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`, `right_gripper.pos`
+- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`
+- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
+- `left_gripper.pos`, `right_gripper.pos`
+
+Supported bimanual robots are `bi_seeed_b601_rt_follower` and `tron2`.
 
 Install in the active LeRobot environment:
 
@@ -98,6 +103,22 @@ lerobot-record-pico4 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
+```
+
+TRON2 bimanual teleoperation example (TRON2 is inherently Cartesian, so
+`--robot.action_mode` is not required; `--teleop.invert_gripper=true` matches
+TRON2's gripper convention where `gripper.pos` high means open):
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --fps=100 \
+  --display_data=true
 ```
 
 For two B601 arms, check the current serial ports before running:

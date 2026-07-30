@@ -460,8 +460,13 @@ class Pico4(Teleoperator):
             self._target_quat = -self._target_quat
         self._apply_rate_limit()
 
-        # B601 mapping: trigger released -> open, trigger pressed -> closed.
-        self._target_gripper_pos = float(controller_trigger) * float(self.config.gripper_width)
+        # Default (B601) mapping: trigger released -> open, trigger pressed -> closed.
+        # With invert_gripper (e.g. TRON2, where gripper.pos high means open),
+        # trigger pressed -> closed still holds by flipping the normalized command.
+        trigger = float(controller_trigger)
+        if self.config.invert_gripper:
+            trigger = 1.0 - trigger
+        self._target_gripper_pos = trigger * float(self.config.gripper_width)
         self._target_gripper_pos = float(np.clip(self._target_gripper_pos, 0.0, self.config.gripper_width))
 
         r6d = _quaternion_to_rotation_6d(self._target_quat)
