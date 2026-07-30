@@ -18,6 +18,14 @@ from lerobot.processor import (
 from lerobot.robots import Robot, RobotConfig, make_robot_from_config
 from lerobot.teleoperators import Teleoperator, TeleoperatorConfig, make_teleoperator_from_config
 from lerobot.utils.import_utils import register_third_party_plugins
+
+# Built-in robots (unlike entry-point plugins) are only registered with draccus when
+# their config module is imported. Import TRON2 so ``--robot.type=tron2`` is a valid
+# choice; guard it so the plugin still works against a lerobot without TRON2.
+try:
+    from lerobot.robots import tron2 as _tron2  # noqa: F401
+except ImportError:
+    pass
 from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
