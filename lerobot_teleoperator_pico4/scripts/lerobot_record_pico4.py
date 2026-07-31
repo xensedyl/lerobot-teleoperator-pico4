@@ -179,7 +179,15 @@ def _wait_for_stable_camera_frames(
         return
 
     camera_configs = getattr(getattr(robot, "config", None), "cameras", {})
-    required_cycles = max(1, round(fps * stabilization_time_s))
+    camera_fps_values = [
+        int(camera_fps)
+        for camera_config in camera_configs.values()
+        if isinstance(camera_configs, dict)
+        and isinstance((camera_fps := getattr(camera_config, "fps", None)), (int, float))
+        and camera_fps > 0
+    ]
+    stabilization_fps = min(camera_fps_values) if camera_fps_values else fps
+    required_cycles = max(1, round(stabilization_fps * stabilization_time_s))
     stabilization_deadline = time.monotonic() + max(10.0, stabilization_time_s * 3)
     stable_cycles = 0
     logging.info(
@@ -211,6 +219,111 @@ def _wait_for_stable_camera_frames(
     # adding the warmup sample to the dataset.
     robot.get_observation()
     logging.info("Camera streams are stable; starting episode recording.")
+
+
+def _format_slow_frame_obs_suffix(robot: Robot | None) -> str:
+    if robot is None:
+        return ""
+
+    timing = getattr(robot, "_last_obs_timing", None)
+    if not isinstance(timing, dict):
+        return ""
+
+    parts: list[str] = []
+    total_ms = timing.get("total_ms")
+    if isinstance(total_ms, (int, float)):
+        parts.append(f"obs={float(total_ms):.1f}ms")
+
+    arm_items = [
+        (key[:-3], float(value))
+        for key, value in timing.items()
+        if key.endswith("_arm_ms") and isinstance(value, (int, float))
+    ]
+    if arm_items:
+        parts.append(f"arms={sum(value for _, value in arm_items):.1f}ms")
+
+    grip_items = [
+        (key[:-3], float(value))
+        for key, value in timing.items()
+        if key.endswith("_grip_ms") and isinstance(value, (int, float))
+    ]
+    if grip_items:
+        parts.append(f"grips={sum(value for _, value in grip_items):.1f}ms")
+
+    head_ms = timing.get("head_ms")
+    if isinstance(head_ms, (int, float)) and float(head_ms) > 0:
+        parts.append(f"head={float(head_ms):.1f}ms")
+
+    cameras_ms = timing.get("cameras_ms")
+    if isinstance(cameras_ms, (int, float)):
+        parts.append(f"cams={float(cameras_ms):.1f}ms")
+
+    camera_items = [
+        (key[4:-4], float(value))
+        for key, value in timing.items()
+        if key.startswith("cam[") and key.endswith("]_ms") and isinstance(value, (int, float))
+    ]
+    camera_age_items = [
+        (key[4:-8], float(value))
+        for key, value in timing.items()
+        if key.startswith("cam[") and key.endswith("]_age_ms") and isinstance(value, (int, float))
+    ]
+    camera_age_items.sort(key=lambda item: item[1], reverse=True)
+    if camera_age_items:
+        parts.append("cam_age=" + ",".join(f"{name}={value:.1f}ms" for name, value in camera_age_items))
+
+    obs_part_items = arm_items + grip_items + camera_items
+    if isinstance(head_ms, (int, float)) and float(head_ms) > 0:
+        obs_part_items.append(("head", float(head_ms)))
+    obs_part_items.sort(key=lambda item: item[1], reverse=True)
+    if obs_part_items:
+        visible_items = [item for item in obs_part_items if item[1] >= 0.1] or obs_part_items
+        parts.append("top_obs=" + ",".join(f"{name}={value:.1f}ms" for name, value in visible_items[:4]))
+
+    return f" | {' '.join(parts)}" if parts else ""
+
+
+def _format_loop_stage_suffix(stage_timings: dict[str, float]) -> str:
+    items = [(key.removesuffix("_ms"), value) for key, value in stage_timings.items()]
+    items.sort(key=lambda item: item[1], reverse=True)
+    visible_items = [item for item in items if item[1] >= 0.1] or items
+    if not visible_items:
+        return ""
+    return " | stages=" + ",".join(f"{name}={value:.1f}ms" for name, value in visible_items[:6])
+
+
+def _record_loop_sleep(
+    start_loop_t: float,
+    fps: int,
+    start_episode_t: float,
+    robot: Robot | None,
+    stage_timings: dict[str, float],
+) -> None:
+    if fps <= 0:
+        return
+
+    budget_s = 1.0 / fps
+    loop_s = time.perf_counter() - start_loop_t
+    remaining_s = budget_s - loop_s
+    if remaining_s > 0:
+        precise_sleep(remaining_s)
+        return
+
+    robot_name = (
+        getattr(robot, "name", None) or getattr(type(robot), "__name__", "record")
+        if robot is not None
+        else "record"
+    )
+    logging.warning(
+        "[slow_frame] robot=%s t=%.3fs loop=%.1fms budget=%.1fms overrun=%.1fms%s%s",
+        robot_name,
+        time.perf_counter() - start_episode_t,
+        loop_s * 1000,
+        budget_s * 1000,
+        -remaining_s * 1000,
+        _format_slow_frame_obs_suffix(robot),
+        _format_loop_stage_suffix(stage_timings),
+    )
 
 
 def _gripper_observation_to_action(robot: Robot, obs: RobotObservation, key: str) -> float:
@@ -295,6 +408,7 @@ def record_loop(
     try:
         while timestamp < control_time_s:
             start_loop_t = time.perf_counter()
+            stage_timings: dict[str, float] = {}
             reset_triggered = False
 
             if events["exit_early"]:
@@ -302,28 +416,60 @@ def record_loop(
                 break
 
             resetting = not reset_done.is_set()
-            obs = robot.get_observation()
-            sync_teleop_tcp_pose(teleop, robot)
+            stage_start = time.perf_counter()
+            try:
+                obs = robot.get_observation()
+            except TimeoutError as error:
+                stage_timings["observation_ms"] = (time.perf_counter() - stage_start) * 1000
+                logging.error(
+                    "[observation_timeout] robot=%s t=%.3fs error=%s%s%s",
+                    getattr(robot, "name", type(robot).__name__),
+                    time.perf_counter() - start_episode_t,
+                    error,
+                    _format_slow_frame_obs_suffix(robot),
+                    _format_loop_stage_suffix(stage_timings),
+                )
+                raise
+            stage_timings["observation_ms"] = (time.perf_counter() - stage_start) * 1000
 
+            stage_start = time.perf_counter()
+            sync_teleop_tcp_pose(teleop, robot)
+            stage_timings["teleop_sync_ms"] = (time.perf_counter() - stage_start) * 1000
+
+            stage_start = time.perf_counter()
             obs_processed = robot_observation_processor(obs)
             observation_frame = None
             if dataset is not None:
                 observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
+            stage_timings["observation_process_ms"] = (time.perf_counter() - stage_start) * 1000
 
             if resetting:
+                stage_start = time.perf_counter()
                 action_values = _observation_as_action(robot, obs)
+                stage_timings["reset_action_ms"] = (time.perf_counter() - stage_start) * 1000
             else:
+                stage_start = time.perf_counter()
                 raw_action = teleop.get_action()
-                if hasattr(teleop, "get_reset_button") and teleop.get_reset_button():
+                reset_button_pressed = hasattr(teleop, "get_reset_button") and teleop.get_reset_button()
+                stage_timings["teleop_read_ms"] = (time.perf_counter() - stage_start) * 1000
+                if reset_button_pressed:
+                    stage_start = time.perf_counter()
                     reset_thread = _start_reset_in_background(robot, teleop, reset_done)
                     reset_triggered = True
                     action_values = _observation_as_action(robot, obs)
+                    stage_timings["reset_action_ms"] = (time.perf_counter() - stage_start) * 1000
                 else:
+                    stage_start = time.perf_counter()
                     action_values = teleop_action_processor((raw_action, obs))
                     robot_action_to_send = robot_action_processor((action_values, obs))
+                    stage_timings["action_process_ms"] = (time.perf_counter() - stage_start) * 1000
+
+                    stage_start = time.perf_counter()
                     action_values = robot.send_action(robot_action_to_send)
+                    stage_timings["robot_send_ms"] = (time.perf_counter() - stage_start) * 1000
 
             if dataset is not None:
+                stage_start = time.perf_counter()
                 action_frame = build_dataset_frame(dataset.features, action_values, prefix=ACTION)
                 if (resetting or reset_triggered) and prev_observation_frame is not None:
                     # Match BiFlexivRT reset recording: the reset runs in the robot
@@ -334,16 +480,24 @@ def record_loop(
                     dataset.add_frame({**observation_frame, **action_frame, "task": single_task})
 
                 prev_observation_frame = observation_frame
+                stage_timings["dataset_ms"] = (time.perf_counter() - stage_start) * 1000
 
             if display_data:
+                stage_start = time.perf_counter()
                 log_rerun_data(
                     observation=obs_processed,
                     action=action_values,
                     compress_images=display_compressed_images,
                 )
+                stage_timings["display_ms"] = (time.perf_counter() - stage_start) * 1000
 
-            dt_s = time.perf_counter() - start_loop_t
-            precise_sleep(max(1 / fps - dt_s, 0.0))
+            _record_loop_sleep(
+                start_loop_t=start_loop_t,
+                fps=fps,
+                start_episode_t=start_episode_t,
+                robot=robot,
+                stage_timings=stage_timings,
+            )
             timestamp = time.perf_counter() - start_episode_t
     finally:
         if reset_thread is not None and reset_thread.is_alive():
@@ -379,6 +533,23 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
+
+    camera_fps_by_name = {
+        name: float(camera_fps)
+        for name, camera_config in getattr(robot.config, "cameras", {}).items()
+        if isinstance((camera_fps := getattr(camera_config, "fps", None)), (int, float)) and camera_fps > 0
+    }
+    slower_cameras = {
+        name: camera_fps for name, camera_fps in camera_fps_by_name.items() if camera_fps < cfg.dataset.fps
+    }
+    if slower_cameras:
+        logging.warning(
+            "[fps_mismatch] dataset.fps=%d exceeds camera FPS (%s). "
+            "Fresh-frame recording will be capped by the slowest camera and emit slow-frame warnings.",
+            cfg.dataset.fps,
+            ", ".join(f"{name}={camera_fps:g}" for name, camera_fps in slower_cameras.items()),
+        )
+
     rgb_encoder = (
         _make_rgb_encoder(cfg.dataset.vcodec, cfg.dataset.fps, cfg.dataset.encoder_threads)
         if cfg.dataset.video
