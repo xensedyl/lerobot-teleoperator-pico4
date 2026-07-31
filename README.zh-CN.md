@@ -124,7 +124,7 @@ lerobot-teleoperate-pico4 \
   --teleop.type=bi_pico4 \
   --teleop.id=bi_pico4 \
   --teleop.invert_gripper=true \
-  --fps=100 \
+  --fps=30 \
   --display_data=true
 ```
 
@@ -151,6 +151,9 @@ lerobot-record-pico4 \
   --dataset.push_to_hub=true \
   --display_data=false
 ```
+
+--dataset.encoder_threads=1 \
+--camera_stabilization_time_s=1 \
 
 说明：
 - `--dataset.repo_id`、`--dataset.single_task` 必填，`repo_id` 用 `用户名/数据集名` 格式。
