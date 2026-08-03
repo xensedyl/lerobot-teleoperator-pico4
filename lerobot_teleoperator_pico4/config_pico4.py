@@ -15,10 +15,11 @@ class Pico4Config(TeleoperatorConfig):
     ori_sensitivity: float = 1.0
     filter_window_size: int = 1
     gripper_width: float = 1.0
-    # Invert the trigger->gripper mapping. Default (False) matches B601:
-    # trigger pressed -> gripper.pos high (closed). Set True for robots such as
-    # TRON2 where gripper.pos high means open.
+
+    # invert_gripper = False: gripper.pos=0 is open,   gripper.pos=1 is closed (B601).
+    # invert_gripper = True:  gripper.pos=0 is closed, gripper.pos=1 is open   (TRON2).
     invert_gripper: bool = False
+    
     grip_enable_threshold: float = 0.5
     grip_disable_threshold: float = 0.3
     orientation_offset_warning_deg: float = 180.0
