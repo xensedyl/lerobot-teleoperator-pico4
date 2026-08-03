@@ -50,6 +50,7 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 from .teleoperate_pico4 import (
     BIMANUAL_ROBOTS,
+    PICO4_TELEOP_TYPES,
     connect_teleop_with_robot_pose,
     reset_to_initial_position,
     sync_teleop_tcp_pose,
@@ -509,8 +510,11 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     init_logging()
     logging.info(pformat(asdict(cfg)))
 
-    if cfg.teleop.type not in {"pico4", "bi_pico4"}:
-        raise ValueError("lerobot-record-pico4 requires --teleop.type=pico4 or bi_pico4.")
+    if cfg.teleop.type not in PICO4_TELEOP_TYPES:
+        raise ValueError(
+            "lerobot-record-pico4 requires "
+            "--teleop.type=pico4, bi_pico4, or pico4hand."
+        )
     # TRON2 is inherently Cartesian (tcp.* actions); other robots must opt in via action_mode.
     if cfg.robot.type != "tron2" and getattr(cfg.robot, "action_mode", None) != "cartesian":
         raise ValueError("Pico4 recording requires --robot.action_mode=cartesian.")
@@ -519,7 +523,7 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
             "--teleop.type=bi_pico4 requires a bimanual robot "
             "(--robot.type=bi_seeed_b601_rt_follower or tron2)."
         )
-    if cfg.teleop.type == "pico4" and cfg.robot.type in BIMANUAL_ROBOTS:
+    if cfg.teleop.type != "bi_pico4" and cfg.robot.type in BIMANUAL_ROBOTS:
         raise ValueError(f"--robot.type={cfg.robot.type} requires --teleop.type=bi_pico4.")
 
     if cfg.display_data:

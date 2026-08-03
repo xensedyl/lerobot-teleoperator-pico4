@@ -33,6 +33,7 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 # Robot types that expose left_*/right_* Cartesian actions and require --teleop.type=bi_pico4.
 BIMANUAL_ROBOTS = {"bi_seeed_b601_rt_follower", "tron2"}
+PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4hand"}
 
 
 @dataclass
@@ -48,6 +49,9 @@ class Pico4TeleoperateConfig:
 
 
 def sync_teleop_tcp_pose(teleop: Teleoperator, robot: Robot) -> None:
+    if not getattr(teleop, "requires_current_tcp_pose", False):
+        return
+
     if not hasattr(robot, "get_current_tcp_pose_quat"):
         raise ValueError(f"{robot} does not provide get_current_tcp_pose_quat().")
 
@@ -62,6 +66,10 @@ def sync_teleop_tcp_pose(teleop: Teleoperator, robot: Robot) -> None:
 
 
 def connect_teleop_with_robot_pose(teleop: Teleoperator, robot: Robot) -> None:
+    if not getattr(teleop, "requires_current_tcp_pose", False):
+        teleop.connect()
+        return
+
     current_pose = robot.get_current_tcp_pose_quat()
     if hasattr(teleop, "set_current_tcp_poses"):
         left_pose, right_pose = current_pose
@@ -159,8 +167,11 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
     init_logging()
     logging.info(pformat(asdict(cfg)))
 
-    if cfg.teleop.type not in {"pico4", "bi_pico4"}:
-        raise ValueError("lerobot-teleoperate-pico4 requires --teleop.type=pico4 or bi_pico4.")
+    if cfg.teleop.type not in PICO4_TELEOP_TYPES:
+        raise ValueError(
+            "lerobot-teleoperate-pico4 requires "
+            "--teleop.type=pico4, bi_pico4, or pico4hand."
+        )
     # TRON2 is inherently Cartesian (tcp.* actions); other robots must opt in via action_mode.
     if cfg.robot.type != "tron2" and getattr(cfg.robot, "action_mode", None) != "cartesian":
         raise ValueError(
@@ -171,7 +182,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
             "--teleop.type=bi_pico4 requires a bimanual robot "
             "(--robot.type=bi_seeed_b601_rt_follower or tron2)."
         )
-    if cfg.teleop.type == "pico4" and cfg.robot.type in BIMANUAL_ROBOTS:
+    if cfg.teleop.type != "bi_pico4" and cfg.robot.type in BIMANUAL_ROBOTS:
         raise ValueError(f"--robot.type={cfg.robot.type} requires --teleop.type=bi_pico4.")
 
     if cfg.display_data:
