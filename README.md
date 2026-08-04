@@ -10,10 +10,15 @@ The single-arm teleoperator outputs Cartesian TCP actions:
 - `tcp.r1` ... `tcp.r6` using 6D rotation representation
 - `gripper.pos` in `[0, 1]`
 
-The bimanual teleoperator uses both Pico4 controllers and outputs prefixed actions:
+The bimanual teleoperator uses both Pico4 controllers and outputs 20 prefixed
+actions ordered as left arm, right arm, left gripper, right gripper (matching the
+TRON2 robot's `action_features` layout):
 
-- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`, `left_gripper.pos`
-- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`, `right_gripper.pos`
+- `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`
+- `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
+- `left_gripper.pos`, `right_gripper.pos`
+
+Supported bimanual robots are `bi_seeed_b601_rt_follower` and `tron2`.
 
 Install in the active LeRobot environment:
 
@@ -99,6 +104,62 @@ lerobot-record-pico4 \
   --dataset.push_to_hub=true \
   --display_data=false
 ```
+
+TRON2 bimanual teleoperation example (TRON2 is inherently Cartesian, so
+`--robot.action_mode` is not required; `--teleop.invert_gripper=true` matches
+TRON2's gripper convention where `gripper.pos` high means open):
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --fps=30 \
+  --display_data=true
+```
+
+TRON2 bimanual recording example (same robot/teleop args as above, plus
+`--dataset.*`; note the recording rate is `--dataset.fps`, not top-level `--fps`):
+
+```bash
+lerobot-record-pico4 \
+  --robot.type=tron2 \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.id=tron2 \
+  --teleop.type=bi_pico4 \
+  --teleop.id=bi_pico4 \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=${HF_USER}/tron2-pico4-demo \
+  --dataset.single_task="Bimanual TRON2 pick and place" \
+  --dataset.num_episodes=5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=30 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false
+```
+
+--dataset.encoder_threads=1 \
+--camera_stabilization_time_s=1 \
+
+Notes:
+- `--dataset.repo_id` and `--dataset.single_task` are required. Use the
+  `username/dataset_name` form for `repo_id`.
+- Set `--dataset.push_to_hub=false` to keep the dataset local
+  (`~/.cache/huggingface/lerobot/<repo_id>`, or override with `--dataset.root=/path`).
+  Use `true` to upload, after `hf auth login`.
+- During recording: **→** ends the current episode and enters reset, **←**
+  re-records the episode, **ESC** stops recording. Between episodes there is a
+  `--dataset.reset_time_s` reset phase; the right-controller **A** button returns
+  both arms to their initial pose (recorded too).
+- The recorded action layout is left arm, right arm, left gripper, right gripper (20-D).
+- Do a quick `--dataset.num_episodes=1 --dataset.push_to_hub=false` dry run first.
 
 For two B601 arms, check the current serial ports before running:
 

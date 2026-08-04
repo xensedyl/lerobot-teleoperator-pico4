@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TCP_POSE_QUAT = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
 
-
 class BiPico4(Teleoperator):
     """Bimanual Pico4 teleoperator using both controllers through one SDK connection."""
 
@@ -40,6 +39,7 @@ class BiPico4(Teleoperator):
                 ori_sensitivity=config.ori_sensitivity,
                 filter_window_size=config.filter_window_size,
                 gripper_width=config.left_gripper_width,
+                invert_gripper=config.invert_gripper,
                 grip_enable_threshold=config.grip_enable_threshold,
                 grip_disable_threshold=config.grip_disable_threshold,
                 orientation_offset_warning_deg=config.orientation_offset_warning_deg,
@@ -58,6 +58,7 @@ class BiPico4(Teleoperator):
                 ori_sensitivity=config.ori_sensitivity,
                 filter_window_size=config.filter_window_size,
                 gripper_width=config.right_gripper_width,
+                invert_gripper=config.invert_gripper,
                 grip_enable_threshold=config.grip_enable_threshold,
                 grip_disable_threshold=config.grip_disable_threshold,
                 orientation_offset_warning_deg=config.orientation_offset_warning_deg,
@@ -77,6 +78,8 @@ class BiPico4(Teleoperator):
         return {
             "dtype": "float32",
             "shape": (20,),
+            # Order: left arm, right arm, left gripper, right gripper (matches the
+            # TRON2 robot's action_features layout).
             "names": {
                 "left_tcp.x": 0,
                 "left_tcp.y": 1,
@@ -87,16 +90,16 @@ class BiPico4(Teleoperator):
                 "left_tcp.r4": 6,
                 "left_tcp.r5": 7,
                 "left_tcp.r6": 8,
-                "left_gripper.pos": 9,
-                "right_tcp.x": 10,
-                "right_tcp.y": 11,
-                "right_tcp.z": 12,
-                "right_tcp.r1": 13,
-                "right_tcp.r2": 14,
-                "right_tcp.r3": 15,
-                "right_tcp.r4": 16,
-                "right_tcp.r5": 17,
-                "right_tcp.r6": 18,
+                "right_tcp.x": 9,
+                "right_tcp.y": 10,
+                "right_tcp.z": 11,
+                "right_tcp.r1": 12,
+                "right_tcp.r2": 13,
+                "right_tcp.r3": 14,
+                "right_tcp.r4": 15,
+                "right_tcp.r5": 16,
+                "right_tcp.r6": 17,
+                "left_gripper.pos": 18,
                 "right_gripper.pos": 19,
             },
         }
@@ -231,11 +234,18 @@ class BiPico4(Teleoperator):
         if not self._is_connected or self._xrt is None:
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
-        left_action = self._left_pico4.get_action()
-        right_action = self._right_pico4.get_action()
+        left_action = self._prefix_action("left", self._left_pico4.get_action())
+        right_action = self._prefix_action("right", self._right_pico4.get_action())
+
+        # Emit in the action_features order: left arm, right arm, left gripper,
+        # right gripper (grippers last, matching the TRON2 robot layout).
+        left_gripper = left_action.pop("left_gripper.pos")
+        right_gripper = right_action.pop("right_gripper.pos")
         return {
-            **self._prefix_action("left", left_action),
-            **self._prefix_action("right", right_action),
+            **left_action,
+            **right_action,
+            "left_gripper.pos": left_gripper,
+            "right_gripper.pos": right_gripper,
         }
 
     def poll_buttons(self) -> None:
