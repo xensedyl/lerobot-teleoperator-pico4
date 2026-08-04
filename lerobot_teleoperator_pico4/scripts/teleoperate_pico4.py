@@ -30,9 +30,9 @@ from lerobot.utils.robot_utils import precise_sleep
 from lerobot.utils.utils import init_logging, move_cursor_up
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
+from ..action_compatibility import check_teleop_robot_action_compatibility
 
-# Robot types that expose left_*/right_* Cartesian actions and require --teleop.type=bi_pico4.
-BIMANUAL_ROBOTS = {"bi_seeed_b601_rt_follower", "tron2"}
+
 PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4head"}
 
 
@@ -172,19 +172,6 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
             "lerobot-teleoperate-pico4 requires "
             "--teleop.type=pico4, bi_pico4, or pico4head."
         )
-    # TRON2 is inherently Cartesian (tcp.* actions); other robots must opt in via action_mode.
-    if cfg.robot.type != "tron2" and getattr(cfg.robot, "action_mode", None) != "cartesian":
-        raise ValueError(
-            "Pico4 teleoperation requires --robot.action_mode=cartesian so tcp.* actions are accepted."
-        )
-    if cfg.teleop.type == "bi_pico4" and cfg.robot.type not in BIMANUAL_ROBOTS:
-        raise ValueError(
-            "--teleop.type=bi_pico4 requires a bimanual robot "
-            "(--robot.type=bi_seeed_b601_rt_follower or tron2)."
-        )
-    if cfg.teleop.type != "bi_pico4" and cfg.robot.type in BIMANUAL_ROBOTS:
-        raise ValueError(f"--robot.type={cfg.robot.type} requires --teleop.type=bi_pico4.")
-
     if cfg.display_data:
         init_rerun(session_name="pico4_teleoperation", ip=cfg.display_ip, port=cfg.display_port)
     display_compressed_images = (
@@ -195,6 +182,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
 
     teleop = make_teleoperator_from_config(cfg.teleop)
     robot = make_robot_from_config(cfg.robot)
+    check_teleop_robot_action_compatibility(teleop, robot)
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
 
     try:
