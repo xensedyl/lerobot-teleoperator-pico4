@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from lerobot.teleoperators.config import TeleoperatorConfig
 
 
-@TeleoperatorConfig.register_subclass("pico4hand")
+@TeleoperatorConfig.register_subclass("pico4head")
 @dataclass
-class Pico4HandConfig(TeleoperatorConfig):
+class Pico4HeadConfig(TeleoperatorConfig):
     """Configuration for controlling a TCP target with the Pico4 headset pose."""
 
-    id: str = "pico4hand"
+    id: str = "pico4head"
     pos_sensitivity: float = 1.0
     ori_sensitivity: float = 1.0
     filter_window_size: int = 1

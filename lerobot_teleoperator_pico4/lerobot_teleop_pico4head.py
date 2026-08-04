@@ -8,7 +8,7 @@ from lerobot.processor import RobotAction
 from lerobot.teleoperators.teleoperator import Teleoperator
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
 
-from .config_pico4hand import Pico4HandConfig
+from .config_pico4head import Pico4HeadConfig
 from .lerobot_teleop_pico4 import (
     _normalize_quaternion,
     _quaternion_inverse,
@@ -22,17 +22,17 @@ logger = logging.getLogger(__name__)
 DEFAULT_TCP_POSE_QUAT = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
 
-class Pico4Hand(Teleoperator):
+class Pico4Head(Teleoperator):
     """Pico4 headset teleoperator.
 
     The headset pose is applied relative to the robot's current TCP pose. The
     output action is tcp.x/y/z and tcp.r1-r6 using the 6D rotation representation.
     """
 
-    config_class = Pico4HandConfig
-    name = "pico4hand"
+    config_class = Pico4HeadConfig
+    name = "pico4head"
 
-    def __init__(self, config: Pico4HandConfig):
+    def __init__(self, config: Pico4HeadConfig):
         super().__init__(config)
         self.config = config
         self._is_connected = False
@@ -52,6 +52,8 @@ class Pico4Hand(Teleoperator):
         self._enabled = False
         self._was_enabled = False
         self._last_x_button = False
+        self._last_a_button = False
+        self._was_reset_button_pressed = False
         self._orientation_control_active = True
         self._last_raw_pose: np.ndarray | None = None
         self._jump_filter_count = 0
@@ -103,7 +105,7 @@ class Pico4Hand(Teleoperator):
             raise ImportError(
                 "xensevr_pc_service_sdk is required for Pico4 headset teleoperation. "
                 "Install the Pico4 PC service pybind package before running "
-                "--teleop.type=pico4hand."
+                "--teleop.type=pico4head."
             ) from e
 
         logger.info("Connecting to Pico4 VR headset...")
@@ -135,6 +137,8 @@ class Pico4Hand(Teleoperator):
             self._enabled = False
             self._was_enabled = False
             self._last_x_button = False
+            self._last_a_button = False
+            self._was_reset_button_pressed = False
             self._orientation_control_active = True
             self._is_connected = True
             logger.info("%s connected.", self)
@@ -160,7 +164,7 @@ class Pico4Hand(Teleoperator):
         current_tcp_pose_quat = np.asarray(current_tcp_pose_quat, dtype=np.float32)
         if current_tcp_pose_quat.shape not in {(7,), (8,)}:
             raise ValueError(
-                "Pico4Hand current TCP pose must be "
+                "Pico4Head current TCP pose must be "
                 "[x, y, z, qw, qx, qy, qz] with an optional gripper value."
             )
         self._current_tcp_pose_quat = current_tcp_pose_quat[:7].copy()
@@ -203,7 +207,20 @@ class Pico4Hand(Teleoperator):
     def _read_headset_state(self) -> tuple[np.ndarray, bool]:
         pose = self._read_headset_pose()
         self._last_x_button = bool(self._xrt.get_X_button())
+        self._last_a_button = bool(self._xrt.get_A_button())
         return pose, self._last_x_button
+
+    def get_reset_button(self) -> bool:
+        """Return True once per A-button press to reset the head to its initial pose.
+
+        The A (right primary) button is separate from the X button that hold-enables
+        teleoperation, so resetting never interferes with motion control. Edge-detected so
+        holding A triggers a single reset instead of repeating every loop iteration.
+        """
+        current_pressed = self._last_a_button
+        just_pressed = current_pressed and not self._was_reset_button_pressed
+        self._was_reset_button_pressed = current_pressed
+        return just_pressed
 
     def _clear_pose_reference(self) -> None:
         self._ref_pos = None
@@ -287,7 +304,7 @@ class Pico4Hand(Teleoperator):
         )
         if not self._orientation_control_active:
             logger.warning(
-                "Pico4Hand orientation offset %.1f deg exceeds threshold %.1f deg; "
+                "Pico4Head orientation offset %.1f deg exceeds threshold %.1f deg; "
                 "orientation control disabled.",
                 offset_angle_deg,
                 self.config.orientation_offset_warning_deg,
@@ -348,12 +365,12 @@ class Pico4Hand(Teleoperator):
             self._start_pos = self._target_pos.copy()
             self._start_quat = self._target_quat.copy()
             self._clear_pose_reference()
-            logger.info("Pico4Hand teleoperation enabled while X is held.")
+            logger.info("Pico4Head teleoperation enabled while X is held.")
         elif just_disabled:
             # Keep sending the last target while X is released. The next press
             # establishes a fresh headset reference before motion resumes.
             self._clear_pose_reference()
-            logger.info("Pico4Hand teleoperation disabled because X was released.")
+            logger.info("Pico4Head teleoperation disabled because X was released.")
 
         self._was_enabled = self._enabled
 
@@ -444,7 +461,7 @@ class Pico4Hand(Teleoperator):
         }
 
     def send_feedback(self, feedback: dict[str, Any]) -> None:
-        raise NotImplementedError("Pico4Hand teleoperator does not support feedback.")
+        raise NotImplementedError("Pico4Head teleoperator does not support feedback.")
 
     def disconnect(self) -> None:
         if not self._is_connected or self._xrt is None:

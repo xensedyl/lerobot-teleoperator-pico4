@@ -33,7 +33,7 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 
 # Robot types that expose left_*/right_* Cartesian actions and require --teleop.type=bi_pico4.
 BIMANUAL_ROBOTS = {"bi_seeed_b601_rt_follower", "tron2"}
-PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4hand"}
+PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4head"}
 
 
 @dataclass
@@ -170,7 +170,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
     if cfg.teleop.type not in PICO4_TELEOP_TYPES:
         raise ValueError(
             "lerobot-teleoperate-pico4 requires "
-            "--teleop.type=pico4, bi_pico4, or pico4hand."
+            "--teleop.type=pico4, bi_pico4, or pico4head."
         )
     # TRON2 is inherently Cartesian (tcp.* actions); other robots must opt in via action_mode.
     if cfg.robot.type != "tron2" and getattr(cfg.robot, "action_mode", None) != "cartesian":

@@ -513,7 +513,7 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
     if cfg.teleop.type not in PICO4_TELEOP_TYPES:
         raise ValueError(
             "lerobot-record-pico4 requires "
-            "--teleop.type=pico4, bi_pico4, or pico4hand."
+            "--teleop.type=pico4, bi_pico4, or pico4head."
         )
     # TRON2 is inherently Cartesian (tcp.* actions); other robots must opt in via action_mode.
     if cfg.robot.type != "tron2" and getattr(cfg.robot, "action_mode", None) != "cartesian":
