@@ -6,12 +6,16 @@
 
 - `--teleop.type=pico4`
 - `--teleop.type=bi_pico4`
+- `--teleop.type=pico4head`
 
 单臂 teleoperator 输出笛卡尔 TCP 动作：
 
 - `tcp.x`, `tcp.y`, `tcp.z`
 - `tcp.r1` ... `tcp.r6`，使用 6D rotation 表示姿态
 - `gripper.pos`，范围是 `[0, 1]`
+
+`pico4head` 使用头显位姿，输出不带夹爪的 9 维 TCP action。长按左手柄 X 键
+启用遥操作，松开 X 键后保持当前目标。
 
 双臂 teleoperator 使用 Pico4 左右两个手柄，输出 20 个带前缀的动作，顺序为
 左臂、右臂、左夹爪、右夹爪（与 TRON2 机器人的 `action_features` 布局一致）：
@@ -20,22 +24,61 @@
 - `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
 - `left_gripper.pos`, `right_gripper.pos`
 
-支持的双臂机器人：`bi_seeed_b601_rt_follower` 和 `tron2`。
+B601 示例统一使用
+`/home/xense/rebot_lerobot/lerobot-robot-seeed-b601-rt`。6 轴头部机械臂使用
+`seeed_b601_rs_follower`，RT 双臂使用 `bi_seeed_b601_rt_follower`；TRON2
+同样支持 `bi_pico4`。
 
 ## 安装
 
-在 LeRobot 使用的 Python 环境里安装：
+Pico SDK 和本插件必须安装在同一个 mamba 环境。先在当前终端激活目标环境，
+因为 `setup_env.sh --install` 会安装到当前已激活的环境：
 
 ```bash
-pip install -e /home/xense/rebot_lerobot/lerobot-teleoperator-pico4
+mamba activate <lerobot-env>
+git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git
+cd Xense-Pico-Teleop-Interface
+bash setup_env.sh --install
+
+cd lerobot-teleoperator-pico4
+pip install -e .
+python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 ```
 
-先安装 LeRobot 和 Pico4 SDK。这个包只安装 Pico4 teleoperator 插件和命令入口，
-不负责安装 LeRobot、B601 robot 插件或 Pico4 SDK。
+如果 SDK 仓库已经存在，跳过 `git clone`，直接进入已有仓库执行
+`bash setup_env.sh --install`。
 
-Pico4 SDK 的 Python 模块 `xensevr_pc_service_sdk` 需要提前装在同一个环境里。
+B601 示例还需要在同一环境中安装最终 Robot 仓库和 FK/IK 包：
+
+```bash
+git clone git@github.com:xensedyl/rebotarm_control_rt.git
+cd rebotarm_control_rt
+bash setup_env.sh --install
+
+git clone git@github.com:xensedyl/lerobot-robot-seeed-b601-rt.git
+cd lerobot-robot-seeed-b601-rt
+pip install -e .
+```
 
 ## 遥操作
+
+使用头显遥操作 6 轴、无夹爪的 RS 机械臂：
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=seeed_b601_rs_follower \
+  --robot.port=can0 \
+  --robot.id=rs_pico_head \
+  --robot.can_adapter=socketcan \
+  --robot.action_mode=cartesian \
+  --robot.gripper_type=none \
+  --teleop.type=pico4head \
+  --teleop.id=pico4head \
+  --fps=60 \
+  --display_data=true
+```
+
+RobStride URDF 已安装在 `rebotarm_control_rt` 包内，不需要额外传 URDF 路径。
 
 Pico4 输出的是 TCP 目标，所以 B601 需要用笛卡尔模式：
 
