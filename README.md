@@ -2,13 +2,18 @@
 
 [中文版说明](./README.zh-CN.md)
 
-Standalone LeRobot teleoperator plugin for Pico4 VR controller TCP teleoperation.
+Standalone LeRobot teleoperator plugin for Pico4 controller and headset TCP
+teleoperation.
 
 The single-arm teleoperator outputs Cartesian TCP actions:
 
 - `tcp.x`, `tcp.y`, `tcp.z`
 - `tcp.r1` ... `tcp.r6` using 6D rotation representation
 - `gripper.pos` in `[0, 1]`
+
+The `pico4head` teleoperator uses the headset pose and outputs a 9D TCP action
+without a gripper. Hold the left controller X button to enable motion and release
+it to freeze the current target.
 
 The bimanual teleoperator uses both Pico4 controllers and outputs 20 prefixed
 actions ordered as left arm, right arm, left gripper, right gripper (matching the
@@ -18,16 +23,60 @@ TRON2 robot's `action_features` layout):
 - `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
 - `left_gripper.pos`, `right_gripper.pos`
 
-Supported bimanual robots are `bi_seeed_b601_rt_follower` and `tron2`.
+Supported B601 examples use the consolidated
+`/home/xense/rebot_lerobot/lerobot-robot-seeed-b601-rt` plugin. The 6-axis head
+arm uses `seeed_b601_rs_follower`; bimanual RT uses
+`bi_seeed_b601_rt_follower`. TRON2 is also supported by `bi_pico4`.
 
-Install in the active LeRobot environment:
+Install the Pico SDK and this plugin in the same active mamba environment. Run
+`mamba activate` in the current terminal before invoking the SDK installer,
+because `setup_env.sh --install` installs into the currently active environment:
 
 ```bash
-pip install -e /home/xense/rebot_lerobot/lerobot-teleoperator-pico4
+mamba activate <lerobot-env>
+git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git
+cd Xense-Pico-Teleop-Interface
+bash setup_env.sh --install
+
+cd lerobot-teleoperator-pico4
+pip install -e .
+python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 ```
 
-Install LeRobot and the Pico4 SDK first. This package only installs the Pico4
-teleoperator plugin and its command entry points.
+If the SDK repository is already cloned, skip `git clone` and run
+`bash setup_env.sh --install` from the existing checkout.
+
+For the B601 examples, install the consolidated robot plugin and build its
+packaged FK/IK dependency in the same environment:
+
+```bash
+git clone git@github.com:xensedyl/rebotarm_control_rt.git
+cd rebotarm_control_rt
+bash setup_env.sh --install
+
+git clone git@github.com:xensedyl/lerobot-robot-seeed-b601-rt.git
+cd lerobot-robot-seeed-b601-rt
+pip install -e .
+```
+
+6-axis RS head teleoperation example (no gripper):
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=seeed_b601_rs_follower \
+  --robot.port=can0 \
+  --robot.id=rs_pico_head \
+  --robot.can_adapter=socketcan \
+  --robot.action_mode=cartesian \
+  --robot.gripper_type=none \
+  --teleop.type=pico4head \
+  --teleop.id=pico4head \
+  --fps=60 \
+  --display_data=true
+```
+
+The RobStride URDF is installed inside `rebotarm_control_rt`; no URDF path is
+required in this command.
 
 Single-arm teleoperation example:
 
@@ -187,5 +236,5 @@ hf auth login
 These commands are provided by the plugin and leave LeRobot's built-in
 `lerobot-teleoperate` and `lerobot-record` scripts unchanged.
 
-The Pico4 SDK Python module `xensevr_pc_service_sdk` must already be installed
-in the same environment.
+The Pico4 SDK Python module `xensevr_pc_service_sdk` must be installed in the
+same environment as this plugin.
