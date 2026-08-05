@@ -48,6 +48,9 @@ python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 如果 SDK 仓库已经存在，跳过 `git clone`，直接进入已有仓库执行
 `bash setup_env.sh --install`。
 
+只有 `pico4`、`bi_pico4` 或 `pico4head` 执行连接时才检查 SDK。缺少 SDK 时，
+对应 teleoperator 会报错并打印上面的安装命令；安装包和导入配置不要求 SDK。
+
 B601 示例还需要在同一环境中安装最终 Robot 仓库和 FK/IK 包：
 
 ```bash

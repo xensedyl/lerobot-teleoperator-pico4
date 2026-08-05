@@ -177,8 +177,13 @@ class Pico4(Teleoperator):
             import xensevr_pc_service_sdk as xrt
         except ImportError as e:
             raise ImportError(
-                "xensevr_pc_service_sdk is required for Pico4 teleoperation. "
-                "Install the Pico4 PC service pybind package before running --teleop.type=pico4."
+                "xensevr_pc_service_sdk is required for bimanual Pico4 teleoperation.\n"
+                "Install the Pico4 PC service pybind package before running --teleop.type=bi_pico4.\n\n"
+                "Install it with:\n"
+                "  mamba activate <lerobot-env>\n"
+                "  git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git\n"
+                "  cd Xense-Pico-Teleop-Interface\n"
+                "  bash setup_env.sh --install\n\n"
             ) from e
 
         logger.info("Connecting to Pico4 VR headset...")

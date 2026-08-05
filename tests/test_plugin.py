@@ -1,3 +1,7 @@
+import builtins
+
+import pytest
+
 from lerobot.teleoperators.config import TeleoperatorConfig
 from lerobot.teleoperators.utils import make_teleoperator_from_config
 
@@ -115,3 +119,22 @@ def test_action_compatibility_reports_missing_and_extra_fields(tmp_path):
         raise AssertionError(
             "Expected incompatible action features to raise ValueError."
         )
+
+
+def test_pico4_connect_missing_sdk_prints_install_commands(monkeypatch):
+    original_import = builtins.__import__
+
+    def import_without_pico_sdk(name, *args, **kwargs):
+        if name == "xensevr_pc_service_sdk":
+            raise ImportError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_without_pico_sdk)
+    teleop = Pico4(Pico4Config())
+
+    with pytest.raises(ImportError) as exc_info:
+        teleop.connect()
+
+    message = str(exc_info.value)
+    assert "bash setup_env.sh --install" in message
+    assert "Xense-Pico-Teleop-Interface.git" in message

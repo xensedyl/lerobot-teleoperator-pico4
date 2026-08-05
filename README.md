@@ -46,6 +46,11 @@ python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 If the SDK repository is already cloned, skip `git clone` and run
 `bash setup_env.sh --install` from the existing checkout.
 
+The SDK is checked only when `pico4`, `bi_pico4`, or `pico4head` connects. If it
+is missing, the selected teleoperator raises an error containing the installation
+commands above. Package installation and configuration imports do not require
+the SDK.
+
 For the B601 examples, install the consolidated robot plugin and build its
 packaged FK/IK dependency in the same environment:
 
