@@ -51,6 +51,7 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 from ..action_compatibility import check_teleop_robot_action_compatibility
 from .teleoperate_pico4 import (
     PICO4_TELEOP_TYPES,
+    connect_robot_and_preinitialize_teleop,
     connect_teleop_with_robot_pose,
     reset_to_initial_position,
     sync_teleop_tcp_pose,
@@ -605,7 +606,7 @@ def record_pico4(cfg: Pico4RecordConfig) -> LeRobotDataset:
                 encoder_threads=cfg.dataset.encoder_threads,
             )
 
-        robot.connect()
+        connect_robot_and_preinitialize_teleop(teleop, robot)
         connect_teleop_with_robot_pose(teleop, robot)
 
         listener, events = init_keyboard_listener()

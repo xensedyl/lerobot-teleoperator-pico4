@@ -23,6 +23,21 @@ TRON2 robot's `action_features` layout):
 - `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
 - `left_gripper.pos`, `right_gripper.pos`
 
+`bi_pico4_head` is the robot bimanual-plus-head teleoperator. It
+combines both controller streams and the headset stream through one SDK
+connection, and outputs 29 actions: the 20 bimanual fields above followed by
+`head_tcp.x/y/z/r1-r6`. Hold left X to move the head; right A resets the
+complete robot.
+
+It does not import, whitelist, or branch on a robot brand. A compatible robot
+only needs the exact 29 action keys and these control methods:
+
+```text
+get_current_tcp_pose_quat() -> (left_pose, right_pose, head_pose)
+send_action(action_29d)
+reset_to_initial_position()
+```
+
 Supported B601 examples use the consolidated
 `/home/xense/rebot_lerobot/lerobot-robot-seeed-b601-rt` plugin. The 6-axis head
 arm uses `seeed_b601_rs_follower`; bimanual RT uses
@@ -46,10 +61,26 @@ python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 If the SDK repository is already cloned, skip `git clone` and run
 `bash setup_env.sh --install` from the existing checkout.
 
-The SDK is checked only when `pico4`, `bi_pico4`, or `pico4head` connects. If it
+The SDK is checked only when `pico4`, `bi_pico4`, `pico4head`, or
+`bi_pico4_head` connects. If it
 is missing, the selected teleoperator raises an error containing the installation
 commands above. Package installation and configuration imports do not require
 the SDK.
+
+One compatible robot-side example is dual Flexiv arms plus a Seeed RS head in
+`lerobot-xense`:
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_flexiv_rizon4_rt_head \
+  --robot.bi_mount_type=forward-04 \
+  --robot.head_port=can0 \
+  --teleop.type=bi_pico4_head \
+  --teleop.head_pos_sensitivity=1 \
+  --teleop.head_ori_sensitivity=1 \
+  --fps=30 \
+  --display_data=true
+```
 
 For the B601 examples, install the consolidated robot plugin and build its
 packaged FK/IK dependency in the same environment:

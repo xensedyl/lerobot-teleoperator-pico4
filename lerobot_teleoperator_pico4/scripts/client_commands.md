@@ -9,13 +9,14 @@ lerobot-teleoperate-pico4
 lerobot-record-pico4
 ```
 
-It supports three teleoperator types:
+It supports four teleoperator types:
 
 | Teleoperator | Controller | Action dimensions | Intended robot |
 | --- | --- | ---: | --- |
 | `pico4` | One Pico controller | 10 | One Cartesian arm with a gripper |
 | `bi_pico4` | Left and right Pico controllers | 20 | Two Cartesian arms with grippers |
 | `pico4head` | Pico headset, enabled by the left X button | 9 | One 6-axis Cartesian arm without a gripper |
+| `bi_pico4_head` | Both controllers plus the headset | 29 | Two Cartesian arms, grippers, and an active head |
 
 
 ## Action schemas and compatibility
@@ -71,6 +72,19 @@ The numeric feature indexes sent by `pico4head` are:
 Robot type names are not hard-coded in the teleoperator. Any robot plugin can be
 used when it exposes the exact action schema required by the selected teleoperator.
 
+### `bi_pico4_head`
+
+```text
+left_tcp.{x,y,z,r1-r6}, right_tcp.{x,y,z,r1-r6},
+left_gripper.pos, right_gripper.pos,
+head_tcp.{x,y,z,r1-r6}
+```
+
+This schema is robot-vendor neutral. A compatible robot must expose those exact
+action feature names and return `(left_pose, right_pose, head_pose)` from
+`get_current_tcp_pose_quat()`. Flexiv + Seeed, TRON-like robots, or any other
+backend use the same teleoperator as long as they implement that contract.
+
 ## Controller mapping
 
 | Teleoperator | Input | Function |
@@ -87,6 +101,9 @@ used when it exposes the exact action schema required by the selected teleoperat
 | `pico4head` | Hold left X | Enable headset control of the 6-axis arm |
 | `pico4head` | Release left X | Stop control and freeze the current target |
 | `pico4head` | Right A | Reset the robot to its configured initial position |
+| `bi_pico4_head` | Both grips/triggers | Control the corresponding arms and grippers |
+| `bi_pico4_head` | Hold left X | Enable headset control of the active head |
+| `bi_pico4_head` | Right A | Reset both arms and the active head |
 
 Each time `pico4head` is enabled, the current headset pose and current robot TCP
 pose are captured as fresh references. This prevents the robot from jumping to an

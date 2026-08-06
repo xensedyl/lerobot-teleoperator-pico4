@@ -7,6 +7,7 @@
 - `--teleop.type=pico4`
 - `--teleop.type=bi_pico4`
 - `--teleop.type=pico4head`
+- `--teleop.type=bi_pico4_head`
 
 单臂 teleoperator 输出笛卡尔 TCP 动作：
 
@@ -23,6 +24,20 @@
 - `left_tcp.x`, `left_tcp.y`, `left_tcp.z`, `left_tcp.r1` ... `left_tcp.r6`
 - `right_tcp.x`, `right_tcp.y`, `right_tcp.z`, `right_tcp.r1` ... `right_tcp.r6`
 - `left_gripper.pos`, `right_gripper.pos`
+
+`bi_pico4_head` 是与机器人型号无关的“双臂 + 主动头部”遥操作器。它在一次
+XenseVR SDK 连接里同时读取左右手柄和头显，输出 29 维 action：上面的双臂
+20 维，加 `head_tcp.x/y/z/r1-r6` 9 维。左手柄 X 按住时头部跟随，右手柄 A
+复位双臂和头部。
+
+遥操作层不会导入、白名单判断或分支处理任何机器人品牌。兼容 Robot 只需要：
+
+```text
+action_features 精确包含 29 个通用键
+get_current_tcp_pose_quat() -> (left_pose, right_pose, head_pose)
+send_action(action_29d)
+reset_to_initial_position()
+```
 
 B601 示例统一使用
 `/home/xense/rebot_lerobot/lerobot-robot-seeed-b601-rt`。6 轴头部机械臂使用
@@ -48,8 +63,23 @@ python -c "import xensevr_pc_service_sdk; print('Pico SDK is available')"
 如果 SDK 仓库已经存在，跳过 `git clone`，直接进入已有仓库执行
 `bash setup_env.sh --install`。
 
-只有 `pico4`、`bi_pico4` 或 `pico4head` 执行连接时才检查 SDK。缺少 SDK 时，
+只有 `pico4`、`bi_pico4`、`pico4head` 或 `bi_pico4_head` 执行连接时才检查
+SDK。缺少 SDK 时，
 对应 teleoperator 会报错并打印上面的安装命令；安装包和导入配置不要求 SDK。
+
+非夕双臂 + Seeed RS 头部只是一个可跑通的机器人侧示例：
+
+```bash
+lerobot-teleoperate \
+  --robot.type=bi_flexiv_rizon4_rt_head \
+  --robot.bi_mount_type=forward-04 \
+  --robot.head_port=can0 \
+  --teleop.type=bi_pico4_head \
+  --teleop.head_pos_sensitivity=1 \
+  --teleop.head_ori_sensitivity=1 \
+  --fps=30 \
+  --display_data=true
+```
 
 B601 示例还需要在同一环境中安装最终 Robot 仓库和 FK/IK 包：
 

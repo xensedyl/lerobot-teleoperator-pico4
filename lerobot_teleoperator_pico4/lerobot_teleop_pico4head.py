@@ -10,6 +10,7 @@ from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnected
 
 from .config_pico4head import Pico4HeadConfig
 from .lerobot_teleop_pico4 import (
+    Pico4,
     _normalize_quaternion,
     _quaternion_inverse,
     _quaternion_multiply,
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TCP_POSE_QUAT = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0], dtype=np.float32)
 
 
-class Pico4Head(Teleoperator):
+class Pico4Head(Pico4):
     """Pico4 headset teleoperator.
 
     The headset pose is applied relative to the robot's current TCP pose. The
@@ -33,7 +34,8 @@ class Pico4Head(Teleoperator):
     name = "pico4head"
 
     def __init__(self, config: Pico4HeadConfig):
-        super().__init__(config)
+        # Reuse Pico4's SDK lifecycle without constructing controller state.
+        Teleoperator.__init__(self, config)
         self.config = config
         self._is_connected = False
         self._xrt = None
@@ -95,43 +97,16 @@ class Pico4Head(Teleoperator):
     def is_calibrated(self) -> bool:
         return self._is_connected
 
+    def _sdk_pose_readers(self, xrt):
+        return {"headset": xrt.get_headset_pose}
+
     def connect(self, calibrate: bool = True) -> None:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        try:
-            import xensevr_pc_service_sdk as xrt
-        except ImportError as e:
-            raise ImportError(
-                "xensevr_pc_service_sdk is required for bimanual Pico4 teleoperation.\n"
-                "Install the Pico4 PC service pybind package before running --teleop.type=bi_pico4.\n\n"
-                "Install it with:\n"
-                "  mamba activate <lerobot-env>\n"
-                "  git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git\n"
-                "  cd Xense-Pico-Teleop-Interface\n"
-                "  bash setup_env.sh --install\n\n"
-            ) from e
-
         logger.info("Connecting to Pico4 VR headset...")
         try:
-            xrt.init()
-            self._xrt = xrt
-            time.sleep(0.5)
-
-            for attempt in range(25):
-                pose = self._read_headset_pose()
-                if any(abs(value) > 1e-6 for value in pose[:7]):
-                    logger.info(
-                        "Pico4 headset data received on attempt %d.", attempt + 1
-                    )
-                    break
-                time.sleep(0.1)
-            else:
-                self._xrt = None
-                raise DeviceNotConnectedError(
-                    "Pico4 headset data is all zero. Restart the Pico4 VR client "
-                    "and check the PC service."
-                )
+            self._get_preinitialized_xrt()
 
             self._sync_target_to_current_tcp_pose()
             self._start_pos = self._target_pos.copy()
@@ -149,12 +124,11 @@ class Pico4Head(Teleoperator):
         except Exception:
             if self._xrt is not None:
                 try:
-                    self._xrt.close()
+                    self._close_sdk()
                 except Exception:
                     logger.debug(
                         "Failed to close Pico4 SDK after connect error.", exc_info=True
                     )
-            self._xrt = None
             self._is_connected = False
             raise
 
@@ -472,8 +446,7 @@ class Pico4Head(Teleoperator):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         try:
-            self._xrt.close()
+            self._close_sdk()
         finally:
-            self._xrt = None
             self._is_connected = False
         logger.info("%s disconnected.", self)

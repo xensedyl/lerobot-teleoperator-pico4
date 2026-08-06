@@ -1,9 +1,7 @@
 import logging
-import time
 from typing import Any
 
 import numpy as np
-
 from lerobot.processor import RobotAction
 from lerobot.teleoperators.teleoperator import Teleoperator
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -12,19 +10,19 @@ from .config_bi_pico4 import BiPico4Config
 from .config_pico4 import Pico4Config
 from .lerobot_teleop_pico4 import Pico4
 
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_TCP_POSE_QUAT = np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], dtype=np.float32)
 
-class BiPico4(Teleoperator):
+class BiPico4(Pico4):
     """Bimanual Pico4 teleoperator using both controllers through one SDK connection."""
 
     config_class = BiPico4Config
     name = "bi_pico4"
 
     def __init__(self, config: BiPico4Config):
-        super().__init__(config)
+        # Reuse Pico4's SDK lifecycle without constructing a third controller.
+        Teleoperator.__init__(self, config)
         self.config = config
         self._is_connected = False
         self._xrt = None
@@ -158,6 +156,12 @@ class BiPico4(Teleoperator):
         child._prev_target_quat = None
         child._is_connected = True
 
+    def _sdk_pose_readers(self, xrt):
+        return {
+            "left controller": xrt.get_left_controller_pose,
+            "right controller": xrt.get_right_controller_pose,
+        }
+
     def connect(
         self,
         calibrate: bool = True,
@@ -166,19 +170,6 @@ class BiPico4(Teleoperator):
     ) -> None:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
-
-        try:
-            import xensevr_pc_service_sdk as xrt
-        except ImportError as e:
-            raise ImportError(
-                "xensevr_pc_service_sdk is required for bimanual Pico4 teleoperation.\n"
-                "Install the Pico4 PC service pybind package before running --teleop.type=bi_pico4.\n\n"
-                "Install it with:\n"
-                "  mamba activate <lerobot-env>\n"
-                "  git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git\n"
-                "  cd Xense-Pico-Teleop-Interface\n"
-                "  bash setup_env.sh --install\n\n"
-            ) from e
 
         left_tcp_pose_quat = (
             DEFAULT_TCP_POSE_QUAT.copy()
@@ -193,25 +184,7 @@ class BiPico4(Teleoperator):
 
         logger.info("Connecting to Pico4 VR headset with both controllers...")
         try:
-            xrt.init()
-            self._xrt = xrt
-            time.sleep(0.5)
-
-            for attempt in range(25):
-                left_pose = xrt.get_left_controller_pose()
-                right_pose = xrt.get_right_controller_pose()
-                left_ok = any(abs(v) > 1e-6 for v in left_pose)
-                right_ok = any(abs(v) > 1e-6 for v in right_pose)
-                if left_ok and right_ok:
-                    logger.info("Pico4 left/right controller data received on attempt %d.", attempt + 1)
-                    break
-                time.sleep(0.1)
-            else:
-                self._xrt = None
-                raise DeviceNotConnectedError(
-                    "Pico4 controller data is all zero. Restart the Pico4 VR client, "
-                    "check the PC service, and make sure both controllers are paired."
-                )
+            xrt = self._get_preinitialized_xrt()
 
             self._init_child(self._left_pico4, xrt, left_tcp_pose_quat)
             self._init_child(self._right_pico4, xrt, right_tcp_pose_quat)
@@ -222,10 +195,9 @@ class BiPico4(Teleoperator):
         except Exception:
             if self._xrt is not None:
                 try:
-                    self._xrt.close()
+                    self._close_sdk()
                 except Exception:
                     logger.debug("Failed to close Pico4 SDK after connect error.", exc_info=True)
-            self._xrt = None
             self._is_connected = False
             self._left_pico4._is_connected = False
             self._right_pico4._is_connected = False
@@ -272,9 +244,8 @@ class BiPico4(Teleoperator):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         try:
-            self._xrt.close()
+            self._close_sdk()
         finally:
-            self._xrt = None
             self._is_connected = False
             self._left_pico4._xrt = None
             self._right_pico4._xrt = None

@@ -1,6 +1,7 @@
 import logging
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pprint import pformat
 
@@ -33,7 +34,7 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 from ..action_compatibility import check_teleop_robot_action_compatibility
 
 
-PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4head"}
+PICO4_TELEOP_TYPES = {"pico4", "bi_pico4", "pico4head", "bi_pico4_head"}
 
 
 @dataclass
@@ -48,6 +49,29 @@ class Pico4TeleoperateConfig:
     display_compressed_images: bool = False
 
 
+def connect_robot_and_preinitialize_teleop(teleop: Teleoperator, robot: Robot) -> None:
+    """Overlap robot connection with optional Pico SDK pre-initialization."""
+    pre_init = getattr(teleop, "pre_init", None)
+    if not callable(pre_init):
+        robot.connect()
+        return
+
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            robot_future = executor.submit(robot.connect)
+            teleop_future = executor.submit(pre_init)
+            teleop_future.result()
+            robot_future.result()
+    except Exception:
+        xrt = getattr(teleop, "_xrt", None)
+        if xrt is not None and not teleop.is_connected:
+            try:
+                xrt.close()
+            finally:
+                teleop._xrt = None
+        raise
+
+
 def sync_teleop_tcp_pose(teleop: Teleoperator, robot: Robot) -> None:
     if not getattr(teleop, "requires_current_tcp_pose", False):
         return
@@ -56,7 +80,9 @@ def sync_teleop_tcp_pose(teleop: Teleoperator, robot: Robot) -> None:
         raise ValueError(f"{robot} does not provide get_current_tcp_pose_quat().")
 
     current_pose = robot.get_current_tcp_pose_quat()
-    if hasattr(teleop, "set_current_tcp_poses"):
+    if teleop.name == "bi_pico4_head":
+        teleop.set_current_tcp_pose(current_pose)
+    elif hasattr(teleop, "set_current_tcp_poses"):
         left_pose, right_pose = current_pose
         teleop.set_current_tcp_poses(left_pose, right_pose)
     elif hasattr(teleop, "set_current_tcp_pose"):
@@ -71,7 +97,17 @@ def connect_teleop_with_robot_pose(teleop: Teleoperator, robot: Robot) -> None:
         return
 
     current_pose = robot.get_current_tcp_pose_quat()
-    if hasattr(teleop, "set_current_tcp_poses"):
+    if teleop.name == "bi_pico4_head":
+        left_pose, right_pose, head_pose = current_pose
+        logging.info("Start left TCP pose (quat): %s", left_pose)
+        logging.info("Start right TCP pose (quat): %s", right_pose)
+        logging.info("Start head TCP pose (quat): %s", head_pose)
+        teleop.connect(
+            left_tcp_pose_quat=left_pose,
+            right_tcp_pose_quat=right_pose,
+            head_tcp_pose_quat=head_pose,
+        )
+    elif hasattr(teleop, "set_current_tcp_poses"):
         left_pose, right_pose = current_pose
         logging.info("Start left TCP pose (quat): %s", left_pose)
         logging.info("Start right TCP pose (quat): %s", right_pose)
@@ -170,7 +206,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
     if cfg.teleop.type not in PICO4_TELEOP_TYPES:
         raise ValueError(
             "lerobot-teleoperate-pico4 requires "
-            "--teleop.type=pico4, bi_pico4, or pico4head."
+            "--teleop.type=pico4, bi_pico4, pico4head, or bi_pico4_head."
         )
     if cfg.display_data:
         init_rerun(session_name="pico4_teleoperation", ip=cfg.display_ip, port=cfg.display_port)
@@ -186,7 +222,7 @@ def teleoperate_pico4(cfg: Pico4TeleoperateConfig) -> None:
     teleop_action_processor, robot_action_processor, robot_observation_processor = make_default_processors()
 
     try:
-        robot.connect()
+        connect_robot_and_preinitialize_teleop(teleop, robot)
         connect_teleop_with_robot_pose(teleop, robot)
 
         teleop_loop(

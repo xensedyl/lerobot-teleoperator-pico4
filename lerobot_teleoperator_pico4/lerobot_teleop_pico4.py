@@ -1,10 +1,9 @@
 import logging
 import time
 from queue import Queue
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
-
 from lerobot.processor import RobotAction
 from lerobot.teleoperators.teleoperator import Teleoperator
 from lerobot.utils.errors import DeviceAlreadyConnectedError, DeviceNotConnectedError
@@ -91,11 +90,77 @@ def _quaternion_to_rotation_6d(q: np.ndarray) -> np.ndarray:
 
 
 class Pico4(Teleoperator):
-    """Pico4 VR controller teleoperator.
+    """Pico4 VR controller teleoperator and shared SDK lifecycle owner."""
 
-    The output action is a Cartesian target:
-    tcp.x/y/z, tcp.r1-r6 (6D rotation), and gripper.pos in [0, 1].
-    """
+    @staticmethod
+    def _import_xrt():
+        try:
+            import xensevr_pc_service_sdk as xrt
+        except ImportError as e:
+            raise ImportError(
+                "xensevr_pc_service_sdk is required for Pico4 teleoperation.\n"
+                "Install the Pico4 PC service pybind package with:\n\n"
+                "  mamba activate <lerobot-env>\n"
+                "  git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git\n"
+                "  cd Xense-Pico-Teleop-Interface\n"
+                "  bash setup_env.sh --install\n\n"
+            ) from e
+        return xrt
+
+    def _sdk_pose_readers(self, xrt) -> dict[str, Callable[[], Any]]:
+        """Return every pose stream that must be valid before connect()."""
+        raise NotImplementedError
+
+    def _wait_for_sdk_inputs(self, xrt, retries: int = 25) -> None:
+        readers = self._sdk_pose_readers(xrt)
+        missing = list(readers)
+        for attempt in range(retries):
+            missing = [
+                name
+                for name, read_pose in readers.items()
+                if not any(abs(float(value)) > 1e-6 for value in read_pose())
+            ]
+            if not missing:
+                logger.info(
+                    "Pico4 inputs ready on attempt %d: %s.",
+                    attempt + 1,
+                    ", ".join(readers),
+                )
+                return
+            time.sleep(0.1)
+        raise DeviceNotConnectedError(
+            "Pico4 input data stayed zero for: "
+            f"{', '.join(missing)}. Restart the VR client and check the PC service."
+        )
+
+    def _close_sdk(self) -> None:
+        xrt = self._xrt
+        self._xrt = None
+        if xrt is not None:
+            xrt.close()
+
+    def pre_init(self) -> None:
+        """Initialize and validate the SDK before the robot finishes connecting."""
+        if self._xrt is not None:
+            return
+
+        xrt = self._import_xrt()
+        try:
+            xrt.init()
+            self._xrt = xrt
+            time.sleep(0.5)
+            self._wait_for_sdk_inputs(xrt)
+        except Exception:
+            try:
+                self._close_sdk()
+            except Exception:
+                logger.debug("Failed to close Pico4 SDK after pre_init error.", exc_info=True)
+            raise
+
+    def _get_preinitialized_xrt(self):
+        if self._xrt is None:
+            self.pre_init()
+        return self._xrt
 
     config_class = Pico4Config
     name = "pico4"
@@ -169,41 +234,20 @@ class Pico4(Teleoperator):
     def is_calibrated(self) -> bool:
         return self._is_connected
 
+    def _sdk_pose_readers(self, xrt) -> dict[str, Callable[[], Any]]:
+        if self.config.use_right_controller:
+            return {"right controller": xrt.get_right_controller_pose}
+        if self.config.use_left_controller:
+            return {"left controller": xrt.get_left_controller_pose}
+        raise RuntimeError("No Pico4 controller enabled.")
+
     def connect(self, calibrate: bool = True) -> None:
         if self._is_connected:
             raise DeviceAlreadyConnectedError(f"{self} already connected")
 
-        try:
-            import xensevr_pc_service_sdk as xrt
-        except ImportError as e:
-            raise ImportError(
-                "xensevr_pc_service_sdk is required for bimanual Pico4 teleoperation.\n"
-                "Install the Pico4 PC service pybind package before running --teleop.type=bi_pico4.\n\n"
-                "Install it with:\n"
-                "  mamba activate <lerobot-env>\n"
-                "  git clone git@github.com:xensedyl/Xense-Pico-Teleop-Interface.git\n"
-                "  cd Xense-Pico-Teleop-Interface\n"
-                "  bash setup_env.sh --install\n\n"
-            ) from e
-
         logger.info("Connecting to Pico4 VR headset...")
         try:
-            xrt.init()
-            self._xrt = xrt
-            time.sleep(0.5)
-
-            for attempt in range(25):
-                pose = self._read_controller_pose()
-                if any(abs(v) > 1e-6 for v in pose):
-                    logger.info("Pico4 controller data received on attempt %d.", attempt + 1)
-                    break
-                time.sleep(0.1)
-            else:
-                self._xrt = None
-                raise DeviceNotConnectedError(
-                    "Pico4 controller data is all zero. Restart the Pico4 VR client, "
-                    "check the PC service, and make sure the selected controller is paired."
-                )
+            self._get_preinitialized_xrt()
 
             self._sync_target_to_current_tcp_pose()
             self._start_pos = self._target_pos.copy()
@@ -220,10 +264,9 @@ class Pico4(Teleoperator):
         except Exception:
             if self._xrt is not None:
                 try:
-                    self._xrt.close()
+                    self._close_sdk()
                 except Exception:
                     logger.debug("Failed to close Pico4 SDK after connect error.", exc_info=True)
-            self._xrt = None
             self._is_connected = False
             raise
 
@@ -512,8 +555,7 @@ class Pico4(Teleoperator):
             raise DeviceNotConnectedError(f"{self} is not connected.")
 
         try:
-            self._xrt.close()
+            self._close_sdk()
         finally:
-            self._xrt = None
             self._is_connected = False
         logger.info("%s disconnected.", self)
