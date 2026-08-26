@@ -12,13 +12,13 @@ class BiPico4HeadConfig(BiPico4Config):
 
     id: str = "bi_pico4_head"
 
-    head_pos_sensitivity: float = 0.5
-    head_ori_sensitivity: float = 0.5
+    head_pos_sensitivity: float = 1
+    head_ori_sensitivity: float = 1
     head_filter_window_size: int = 3
     head_orientation_offset_warning_deg: float = 180.0
     head_position_jump_threshold: float = 0.1
-    head_max_pos_velocity: float = 0.25
-    head_max_rot_velocity: float = 1.0
+    head_max_pos_velocity: float = 1.0
+    head_max_rot_velocity: float = 6.28
     # Head control is fixed to the left-controller X button and tracks both
     # headset position and orientation.
 

@@ -11,9 +11,6 @@ from tempfile import TemporaryDirectory
 
 import rerun as rr
 
-from lerobot.cameras import CameraConfig  # noqa: F401
-from lerobot.cameras.opencv.configuration_opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.realsense.configuration_realsense import RealSenseCameraConfig  # noqa: F401
 from lerobot.configs import parser
 from lerobot.configs.video import RGBEncoderConfig
 from lerobot.datasets.image_writer import safe_stop_image_writer
