@@ -202,6 +202,26 @@ lerobot-teleoperate-pico4 \
     --display_data=true
 ```
 
+```bash
+lerobot-teleoperate-pico4 \
+    --robot.type=tron2_rt \
+    --robot.robot_ip=10.192.1.2 \
+    --robot.robot_port=5000 \
+    --robot.control_mode=cartesian \
+    --robot.control_hz=300 \
+    --robot.use_grippers=true \
+    --robot.use_head=true \
+    --robot.reset_on_disconnect=true \
+    --teleop.type=bi_pico4_head \
+    --teleop.id=bi_pico4_head \
+    --teleop.invert_gripper=true \
+    --fps=30 \
+    --display_data=true
+```
+
+Set `--fps=60` for a 60 Hz TRON2 waypoint loop. The native 300 Hz controller
+uses measured arrival intervals, so no second robot command frequency is needed.
+
 Gripper conventions:
 
 | Configuration | `gripper.pos=0` | `gripper.pos=1` | Robot |
@@ -300,7 +320,34 @@ lerobot-record-pico4 \
     --dataset.reset_time_s=10 \
     --dataset.streaming_encoding=true \
     --dataset.vcodec=auto \
-    --display_data=true
+    --dataset.push_to_hub=false \
+    --display_data=false
+```
+
+```bash
+lerobot-record-pico4 \
+    --robot.type=tron2_rt \
+    --robot.robot_ip=10.192.1.2 \
+    --robot.robot_port=5000 \
+    --robot.control_mode=cartesian \
+    --robot.control_hz=300 \
+    --robot.use_grippers=true \
+    --robot.use_head=true \
+    --robot.reset_on_disconnect=true \
+    --teleop.type=bi_pico4_head \
+    --teleop.id=bi_pico4_head \
+    --teleop.invert_gripper=true \
+    --dataset.repo_id=${HF_USER}/tron2rt-pico4-demo \
+    --dataset.single_task="Perform a bimanual manipulation task" \
+    --dataset.fps=30 \
+    --dataset.num_episodes=10 \
+    --dataset.episode_time_s=60 \
+    --dataset.reset_time_s=20 \
+    --dataset.streaming_encoding=true \
+    --dataset.vcodec=auto \
+    --dataset.push_to_hub=false \
+    --display_data=false \
+    --resume=false
 ```
 
 ## Recording controls

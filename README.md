@@ -190,8 +190,8 @@ lerobot-record-pico4 \
   --display_data=false
 ```
 
-TRON2 bimanual teleoperation example (TRON2 is inherently Cartesian, so
-`--robot.action_mode` is not required; `--teleop.invert_gripper=true` matches
+TRON2 RT bimanual teleoperation example (300 Hz native loop with 30 Hz Pico4
+waypoints; `--teleop.invert_gripper=true` matches
 TRON2's gripper convention where `gripper.pos` high means open):
 
 ```bash
@@ -205,6 +205,28 @@ lerobot-teleoperate-pico4 \
   --fps=30 \
   --display_data=true
 ```
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --fps=30 \
+  --display_data=true
+```
+
+For TRON2 RT, `--fps=60` sends 60 Hz waypoints when the loop can sustain it.
+The native 300 Hz controller measures the actual arrival interval and chooses
+the interpolation samples automatically; no second robot command frequency is
+needed.
 
 TRON2 bimanual recording example (same robot/teleop args as above, plus
 `--dataset.*`; note the recording rate is `--dataset.fps`, not top-level `--fps`):
@@ -228,6 +250,33 @@ lerobot-record-pico4 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
+```
+
+```bash
+lerobot-record-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=${HF_USER}/tron2-pico4-demo \
+  --dataset.single_task="Bimanual TRON2 pick and place" \
+  --dataset.num_episodes=5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=30 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false \
+  --resume=false
 ```
 
 --dataset.encoder_threads=1 \

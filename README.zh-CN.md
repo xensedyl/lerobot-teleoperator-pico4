@@ -189,7 +189,7 @@ lerobot-record-pico4 \
   --display_data=false
 ```
 
-TRON2 双臂遥操作示例（TRON2 本身就是笛卡尔控制，无需 `--robot.action_mode`；
+TRON2 RT 双臂遥操作示例（底层 300 Hz、Pico4 路点 30 Hz；
 `--teleop.invert_gripper=true` 用于匹配 TRON2 的夹爪方向，即 `gripper.pos` 越大越开）：
 
 ```bash
@@ -203,6 +203,27 @@ lerobot-teleoperate-pico4 \
   --fps=30 \
   --display_data=true
 ```
+
+```bash
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --fps=30 \
+  --display_data=true
+```
+
+TRON2 RT 使用 `--fps=60` 时，上层循环能跑满就会按 60 Hz 发送路点。底层
+300 Hz 控制器根据路点的实际到达时间自动决定插值样本数，不需要额外的
+机器人内部指令频率参数。
 
 TRON2 双臂数据采集示例（机器人/手柄参数和上面遥操作一样，多了 `--dataset.*`；
 注意采集帧率是 `--dataset.fps`，不是顶层 `--fps`）：
@@ -226,6 +247,33 @@ lerobot-record-pico4 \
   --resume=false \
   --dataset.push_to_hub=true \
   --display_data=false
+```
+
+```bash
+lerobot-record-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=${HF_USER}/tron2-pico4-demo \
+  --dataset.single_task="双臂 TRON2 抓取放置" \
+  --dataset.num_episodes=5 \
+  --dataset.fps=30 \
+  --dataset.episode_time_s=60 \
+  --dataset.reset_time_s=30 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --resume=false \
+  --dataset.push_to_hub=true \
+  --display_data=false \
+  --resume=false
 ```
 
 --dataset.encoder_threads=1 \
