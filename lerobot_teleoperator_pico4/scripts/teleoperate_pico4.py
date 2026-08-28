@@ -142,6 +142,31 @@ def teleop_loop(
     display_compressed_images: bool = False,
 ) -> None:
     display_len = max(len(key) for key in robot.action_features)
+
+    def _display_action_columns(action: RobotAction) -> int:
+        columns = [
+            ("LEFT", [(key, value) for key, value in action.items() if key.startswith("left_")]),
+            ("RIGHT", [(key, value) for key, value in action.items() if key.startswith("right_")]),
+            ("HEAD", [(key, value) for key, value in action.items() if key.startswith("head_")]),
+        ]
+        prefixes = ("left_", "right_", "head_")
+        other = [(key, value) for key, value in action.items() if not key.startswith(prefixes)]
+        if other:
+            columns.append(("ACTION", other))
+        columns = [(name, values) for name, values in columns if values]
+
+        column_width = display_len + 9
+        print("\n" + "-" * (column_width * len(columns)))
+        print("".join(f"{name:<{column_width}}" for name, _ in columns).rstrip())
+        rows = max(len(values) for _, values in columns)
+        for row in range(rows):
+            line = ""
+            for _, values in columns:
+                cell = f"{values[row][0]:<{display_len}} {float(values[row][1]):>7.2f}" if row < len(values) else ""
+                line += f"{cell:<{column_width}}"
+            print(line.rstrip())
+        return rows + 3
+
     start = time.perf_counter()
 
     while True:
@@ -180,11 +205,8 @@ def teleop_loop(
                 compress_images=display_compressed_images,
             )
 
-            print("\n" + "-" * (display_len + 10))
-            print(f"{'NAME':<{display_len}} | {'NORM':>7}")
-            for motor, value in sent_action.items():
-                print(f"{motor:<{display_len}} | {value:>7.2f}")
-            move_cursor_up(len(sent_action) + 3)
+            display_lines = _display_action_columns(sent_action)
+            move_cursor_up(display_lines)
 
         dt_s = time.perf_counter() - loop_start
         precise_sleep(max(1 / fps - dt_s, 0.0))
