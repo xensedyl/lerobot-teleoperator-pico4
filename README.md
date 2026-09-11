@@ -323,10 +323,10 @@ lerobot-record-pico4 \
   --robot.reset_on_disconnect=true \
   --robot.use_tool_calibration=true \
   --robot.camera_host=10.192.1.4 \
+  --robot.taccap_remote_url=http://10.192.1.4:8765 \
+  --robot.taccap_remote_auto_enable=true \
   --robot.gripper.type=taccap_follower \
-  --robot.gripper.remote_base_url=http://127.0.0.1:8765 \
-  --robot.gripper.remote_auto_enable=true \
-  --robot.gripper.auto_discover_cameras=true \
+  --robot.gripper.auto_discover_cameras=false \
   --robot.gripper.enable_tactile=true \
   --robot.gripper.remote_timeout_s=2 \
   --teleop.type=bi_pico4_head \
