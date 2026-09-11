@@ -216,15 +216,44 @@ lerobot-teleoperate-pico4 \
   --robot.use_grippers=true \
   --robot.use_head=true \
   --robot.reset_on_disconnect=true \
+  --robot.gripper.control_mode=mit \
   --teleop.type=bi_pico4_head \
   --teleop.id=bi_pico4_head \
   --teleop.invert_gripper=true \
   --fps=30 \
   --display_data=true
 ```
+
 ```bash
-lerobot-teleoperate-pico4     --robot.type=tron2_rt     --robot.robot_ip=10.192.1.2     --robot.robot_port=5000     --robot.control_mode=cartesian     --robot.control_hz=300     --robot.use_grippers=true     --robot.use_head=true     --robot.reset_on_disconnect=true     --robot.camera_host=10.192.1.4     --robot.gripper.type=taccap_follower     --robot.gripper.remote_base_url=http://127.0.0.1:8765     --robot.gripper.remote_auto_enable=true     --robot.gripper.auto_discover_cameras=true     --robot.gripper.enable_tactile=true     --robot.gripper.remote_timeout_s=2     --robot.gripper.remote_state_hz=30     --teleop.type=bi_pico4_head     --teleop.id=bi_pico4_head     --teleop.invert_gripper=true     --fps=30     --display_data=true
+lerobot-teleoperate-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --robot.camera_host=10.192.1.4 \
+  --robot.gripper.type=taccap_follower \
+  --robot.gripper.remote_base_url=http://10.192.1.4:8765 \
+  --robot.gripper.remote_auto_enable=true \
+  --robot.gripper.auto_discover_cameras=true \
+  --robot.gripper.enable_tactile=true \
+  --robot.gripper.control_mode=mit \
+  --robot.gripper.remote_timeout_s=2 \
+  --robot.gripper.remote_state_hz=30 \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --fps=30 \
+  --display_data=true
 ```
+
+`--robot.gripper.control_mode=mit` selects the TacCap MIT impedance command;
+use `position` for the bounded firmware position command. The setting is sent
+to the `.4` service when each follower connects. The service Web page can also
+change the left and right modes independently while it is running.
 
 
 For TRON2 RT, `--fps=60` sends 60 Hz waypoints when the loop can sustain it.
