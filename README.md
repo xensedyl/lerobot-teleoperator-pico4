@@ -312,36 +312,36 @@ lerobot-record-pico4 \
 ```
 
 ```bash
-  lerobot-record-pico4 \
-      --robot.type=tron2_rt \
-      --robot.robot_ip=10.192.1.2 \
-      --robot.robot_port=5000 \
-      --robot.control_mode=cartesian \
-      --robot.control_hz=300 \
-      --robot.use_grippers=true \
-      --robot.use_head=true \
-      --robot.reset_on_disconnect=true \
-      --robot.use_tool_calibration=true \
-      --robot.camera_host=10.192.1.4 \
-      --robot.gripper.type=taccap_follower \
-      --robot.gripper.remote_base_url=http://127.0.0.1:8765 \
-      --robot.gripper.remote_auto_enable=true \
-      --robot.gripper.auto_discover_cameras=true \
-      --robot.gripper.enable_tactile=true \
-      --robot.gripper.remote_timeout_s=2 \
-      --teleop.type=bi_pico4_head \
-      --teleop.id=bi_pico4_head \
-      --teleop.invert_gripper=true \
-      --dataset.repo_id=xensedyl/tron2rt-pico4-demo \
-      --dataset.single_task="Perform a bimanual manipulation task" \
-      --dataset.fps=30 \
-      --dataset.num_episodes=10 \
-      --dataset.episode_time_s=300 \
-      --dataset.reset_time_s=60 \
-      --dataset.streaming_encoding=true \
-      --dataset.vcodec=auto \
-      --display_data=false \
-      --resume=true
+lerobot-record-pico4 \
+  --robot.type=tron2_rt \
+  --robot.robot_ip=10.192.1.2 \
+  --robot.robot_port=5000 \
+  --robot.control_mode=cartesian \
+  --robot.control_hz=300 \
+  --robot.use_grippers=true \
+  --robot.use_head=true \
+  --robot.reset_on_disconnect=true \
+  --robot.use_tool_calibration=true \
+  --robot.camera_host=10.192.1.4 \
+  --robot.gripper.type=taccap_follower \
+  --robot.gripper.remote_base_url=http://127.0.0.1:8765 \
+  --robot.gripper.remote_auto_enable=true \
+  --robot.gripper.auto_discover_cameras=true \
+  --robot.gripper.enable_tactile=true \
+  --robot.gripper.remote_timeout_s=2 \
+  --teleop.type=bi_pico4_head \
+  --teleop.id=bi_pico4_head \
+  --teleop.invert_gripper=true \
+  --dataset.repo_id=xensedyl/tron2rt-pico4-demo \
+  --dataset.single_task="Perform a bimanual manipulation task" \
+  --dataset.fps=30 \
+  --dataset.num_episodes=10 \
+  --dataset.episode_time_s=300 \
+  --dataset.reset_time_s=60 \
+  --dataset.streaming_encoding=true \
+  --dataset.vcodec=auto \
+  --display_data=false \
+  --resume=true
 ```
 
 --dataset.encoder_threads=1 \
