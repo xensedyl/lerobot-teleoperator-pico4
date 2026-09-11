@@ -242,7 +242,6 @@ lerobot-teleoperate-pico4 \
   --robot.gripper.enable_tactile=true \
   --robot.gripper.control_mode=mit \
   --robot.gripper.remote_timeout_s=2 \
-  --robot.gripper.remote_state_hz=30 \
   --teleop.type=bi_pico4_head \
   --teleop.id=bi_pico4_head \
   --teleop.invert_gripper=true \
@@ -330,8 +329,6 @@ lerobot-record-pico4 \
       --robot.gripper.auto_discover_cameras=true \
       --robot.gripper.enable_tactile=true \
       --robot.gripper.remote_timeout_s=2 \
-      --robot.gripper.remote_state_hz=30 \
-      --robot.gripper.remote_tactile_fps=60 \
       --teleop.type=bi_pico4_head \
       --teleop.id=bi_pico4_head \
       --teleop.invert_gripper=true \
@@ -339,8 +336,8 @@ lerobot-record-pico4 \
       --dataset.single_task="Perform a bimanual manipulation task" \
       --dataset.fps=30 \
       --dataset.num_episodes=10 \
-      --dataset.episode_time_s=60 \
-      --dataset.reset_time_s=20 \
+      --dataset.episode_time_s=300 \
+      --dataset.reset_time_s=60 \
       --dataset.streaming_encoding=true \
       --dataset.vcodec=auto \
       --display_data=false \
